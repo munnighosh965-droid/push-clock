@@ -149,11 +149,19 @@ fun ReliabilityScreen(onBack: () -> Unit) {
 
         Spacer(Modifier.height(12.dp))
         PowerCard(Modifier.fillMaxWidth()) {
-            Text(
-                "Good to know: if you \"force stop\" Power Clock from system settings, Android blocks ALL of its alarms until the app is opened again. This is an operating-system rule that applies to every third-party alarm clock. Swiping the app away from Recents is fine.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column {
+                Text(
+                    "Good to know: if you \"force stop\" Power Clock from system settings, Android blocks ALL of its alarms until the app is opened again. This is an operating-system rule that applies to every third-party alarm clock. Swiping the app away from Recents is fine.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Xiaomi / Redmi / POCO (MIUI & HyperOS): also enable \"Autostart\" for Power Clock and allow \"Display pop-up windows while running in the background\" (Settings → Apps → Power Clock → Other permissions), and set Battery saver to \"No restrictions\". Without these, MIUI can block alarms from ringing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
         }
         Spacer(Modifier.height(32.dp))
     }

@@ -2,9 +2,11 @@ package com.powerclock.alarm.alarmengine
 
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -39,6 +41,24 @@ class RingingActivity : ComponentActivity() {
         }
         (getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager)
             .requestDismissKeyguard(this, null)
+
+        // If the ringing service could not be started from the background
+        // (OEM restrictions), this activity was opened by the fallback
+        // notification instead. Starting the service from a foreground
+        // activity is always permitted; the service dedupes repeated ids.
+        val alarmId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
+        if (alarmId > 0L) {
+            try {
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, AlarmRingingService::class.java).apply {
+                        action = AlarmRingingService.ACTION_RING
+                        putExtra(AlarmRingingService.EXTRA_ALARM_ID, alarmId)
+                    },
+                )
+            } catch (_: Throwable) {
+            }
+        }
 
         onBackPressedDispatcher.addCallback(
             this,

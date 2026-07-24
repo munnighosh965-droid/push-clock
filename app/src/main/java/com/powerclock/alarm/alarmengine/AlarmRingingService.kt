@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -30,6 +31,7 @@ import com.powerclock.alarm.domain.model.Alarm
 import com.powerclock.alarm.domain.model.WakeEvent
 import com.powerclock.alarm.domain.model.WakeOutcome
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,8 +49,16 @@ import javax.inject.Inject
  * pulses, a short wake lock, the ringing notification with its full-screen
  * intent, the overlap queue, and the safety auto-silence timeout.
  *
- * Hard rule: every resource acquired here is released in [stopRingingInternal],
- * which runs on every exit path including [onDestroy].
+ * Hard rules:
+ *  - [android.app.Service.startForeground] is called synchronously in
+ *    [onStartCommand], before any I/O, so the 5-second foreground window can
+ *    never be missed on slow or throttled devices.
+ *  - No exception may kill the process while an alarm should be ringing:
+ *    the coroutine scope carries a [CoroutineExceptionHandler] that falls
+ *    back to a minimal "panic ring" (vibration + fallback tone) instead of
+ *    crashing.
+ *  - Every resource acquired here is released in [stopRingingInternal],
+ *    which runs on every exit path including [onDestroy].
  */
 @AndroidEntryPoint
 class AlarmRingingService : Service() {
@@ -61,15 +71,23 @@ class AlarmRingingService : Service() {
     @Inject lateinit var stateHolder: RingingStateHolder
     @Inject lateinit var customAudioStore: CustomAudioStore
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val crashGuard = CoroutineExceptionHandler { _, _ ->
+        // Never let a ringing alarm die silently with the process: fall back
+        // to the simplest possible ring.
+        panicRing()
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashGuard)
 
     private var player: ExoPlayer? = null
+    private var panicPlayer: MediaPlayer? = null
+    private var fallbackToneActive = false
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var torchJob: Job? = null
     private var volumeRampJob: Job? = null
     private var autoSilenceJob: Job? = null
     private var torchCameraId: String? = null
+    private var foregroundStarted = false
 
     private var activeAlarm: Alarm? = null
     private var activeEventId: Long = -1L
@@ -82,6 +100,9 @@ class AlarmRingingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Enter the foreground state immediately — before any database or
+        // player work — so the system's foreground deadline is always met.
+        ensureForeground()
         when (intent?.action) {
             ACTION_RING -> {
                 val alarmId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
@@ -102,6 +123,30 @@ class AlarmRingingService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun ensureForeground(alarm: Alarm? = null) {
+        try {
+            val notification = if (alarm != null) {
+                notifications.ringingNotification(alarm)
+            } else {
+                notifications.genericRingingNotification()
+            }
+            ServiceCompat.startForeground(
+                this,
+                AlarmNotifications.NOTIFICATION_ID_RINGING,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                } else {
+                    0
+                },
+            )
+            foregroundStarted = true
+        } catch (_: Throwable) {
+            // Even if foreground promotion fails (OEM restrictions), keep
+            // running as long as the system allows and still ring.
+        }
+    }
+
     // ------------------------------------------------------------------ ring
 
     private fun onRingRequested(alarmId: Long) {
@@ -111,13 +156,21 @@ class AlarmRingingService : Service() {
         stateHolder.updateQueuedCount(ringQueue.queuedCount)
         if (!startNow) return
         scope.launch {
-            val alarm = alarmRepository.getById(alarmId)
+            val alarm = try {
+                alarmRepository.getById(alarmId)
+            } catch (_: Throwable) {
+                null
+            }
             if (alarm == null || !alarm.enabled) {
                 // Deleted or disabled after the trigger was armed.
                 advanceQueueOrStop()
                 return@launch
             }
-            startRinging(alarm)
+            try {
+                startRinging(alarm)
+            } catch (_: Throwable) {
+                panicRing()
+            }
         }
     }
 
@@ -125,11 +178,20 @@ class AlarmRingingService : Service() {
     private suspend fun advanceQueueOrStop() {
         while (true) {
             val nextId = ringQueue.finishActive() ?: break
-            val alarm = alarmRepository.getById(nextId)
+            val alarm = try {
+                alarmRepository.getById(nextId)
+            } catch (_: Throwable) {
+                null
+            }
             if (alarm != null && alarm.enabled) {
                 stateHolder.updateQueuedCount(ringQueue.queuedCount)
-                startRinging(alarm)
-                return
+                try {
+                    startRinging(alarm)
+                    return
+                } catch (_: Throwable) {
+                    panicRing()
+                    return
+                }
             }
         }
         stateHolder.set(null)
@@ -140,49 +202,100 @@ class AlarmRingingService : Service() {
         val now = System.currentTimeMillis()
         activeAlarm = alarm
         missionStartedAtMs = null
+        fallbackToneActive = false
 
-        // Foreground first: this must happen quickly after startForegroundService.
-        val notification = notifications.ringingNotification(alarm)
-        ServiceCompat.startForeground(
-            this,
-            AlarmNotifications.NOTIFICATION_ID_RINGING,
-            notification,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            } else {
-                0
-            },
-        )
+        // Upgrade the provisional notification with the alarm's label.
+        ensureForeground(alarm)
 
         // History row is created immediately so even a crash records the ring.
-        activeEventId = historyRepository.insert(
-            WakeEvent(
-                alarmId = alarm.id,
-                alarmLabel = alarm.label,
-                scheduledAtMs = now,
-                rangAtMs = now,
-                outcome = WakeOutcome.MISSED,
-            ),
-        )
+        activeEventId = try {
+            historyRepository.insert(
+                WakeEvent(
+                    alarmId = alarm.id,
+                    alarmLabel = alarm.label,
+                    scheduledAtMs = now,
+                    rangAtMs = now,
+                    outcome = WakeOutcome.MISSED,
+                ),
+            )
+        } catch (_: Throwable) {
+            -1L
+        }
         stateHolder.set(RingingSession(alarm, activeEventId, now, ringQueue.queuedCount))
 
         // Keep the next occurrence armed even before this one is dismissed.
-        if (alarm.isRepeating) {
-            scheduler.schedule(alarm, ZonedDateTime.now().plusSeconds(1))
-        } else {
-            alarmRepository.setEnabled(alarm.id, enabled = false)
+        try {
+            if (alarm.isRepeating) {
+                scheduler.schedule(alarm, ZonedDateTime.now().plusSeconds(1))
+            } else {
+                alarmRepository.setEnabled(alarm.id, enabled = false)
+            }
+        } catch (_: Throwable) {
         }
 
         acquireWakeLock()
-        startAudio(alarm)
+        try {
+            startAudio(alarm)
+        } catch (_: Throwable) {
+            startPanicAudio()
+        }
         if (alarm.vibrate) startVibration(alarm.vibrationPatternId)
         if (alarm.flashlight) startTorchPulses()
 
-        val settings = settingsRepository.current()
+        val autoSilenceMinutes = try {
+            settingsRepository.current().autoSilenceMinutes
+        } catch (_: Throwable) {
+            15
+        }
         autoSilenceJob?.cancel()
         autoSilenceJob = scope.launch {
-            delay(settings.autoSilenceMinutes.coerceIn(5, 30) * 60_000L)
+            delay(autoSilenceMinutes.coerceIn(5, 30) * 60_000L)
             onDismiss(WakeOutcome.MISSED, 0, "auto-silenced")
+        }
+    }
+
+    /**
+     * Minimal unbreakable ring used when anything in the normal pipeline
+     * fails: notification (already posted), vibration, and a plain
+     * MediaPlayer looping the bundled tone on the alarm stream.
+     */
+    private fun panicRing() {
+        try {
+            if (vibrator == null) startVibration(0)
+        } catch (_: Throwable) {
+        }
+        startPanicAudio()
+        if (autoSilenceJob == null || autoSilenceJob?.isActive != true) {
+            autoSilenceJob = scope.launch {
+                delay(15 * 60_000L)
+                onDismiss(WakeOutcome.MISSED, 0, "auto-silenced(panic)")
+            }
+        }
+    }
+
+    private fun startPanicAudio() {
+        if (panicPlayer != null) return
+        try {
+            val mp = MediaPlayer()
+            panicPlayer = mp
+            mp.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            resources.openRawResourceFd(SoundResources.resIdFor(SoundResources.FALLBACK_RES_ID_NAME))
+                .use { afd ->
+                    mp.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                }
+            mp.isLooping = true
+            mp.setOnErrorListener { _, _, _ -> true }
+            mp.prepare()
+            mp.start()
+        } catch (_: Throwable) {
+            panicPlayer = null
+            // Vibration and the notification remain; the alarm is still
+            // visible and dismissable.
         }
     }
 
@@ -199,7 +312,7 @@ class AlarmRingingService : Service() {
                 previousAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
                 val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
-            } catch (_: SecurityException) {
+            } catch (_: Throwable) {
                 previousAlarmVolume = -1
             }
         }
@@ -249,12 +362,19 @@ class AlarmRingingService : Service() {
         // Custom track, only when it is still readable right now.
         val customUri = alarm.customSoundUri
         if (alarm.soundId == SoundCatalog.CUSTOM_ID && customUri != null) {
-            val uri = Uri.parse(customUri)
-            if (customAudioStore.isPlayable(uri)) {
+            val playable = try {
+                customAudioStore.isPlayable(Uri.parse(customUri))
+            } catch (_: Throwable) {
+                false
+            }
+            if (playable) {
                 val clip = MediaItem.ClippingConfiguration.Builder()
                     .setStartPositionMs(alarm.customSoundStartMs.coerceAtLeast(0L))
                     .build()
-                return MediaItem.Builder().setUri(uri).setClippingConfiguration(clip).build()
+                return MediaItem.Builder()
+                    .setUri(Uri.parse(customUri))
+                    .setClippingConfiguration(clip)
+                    .build()
             }
         }
         val sound = if (alarm.randomSound) {
@@ -266,41 +386,52 @@ class AlarmRingingService : Service() {
     }
 
     private fun playFallbackTone() {
-        val exo = player ?: return
+        // Guard against error loops: if the fallback itself fails, hand the
+        // job to the bullet-proof MediaPlayer path exactly once.
+        if (fallbackToneActive) {
+            startPanicAudio()
+            return
+        }
+        fallbackToneActive = true
+        val exo = player
+        if (exo == null) {
+            startPanicAudio()
+            return
+        }
         try {
-            exo.setMediaItem(MediaItem.fromUri(rawUri(SoundCatalog.byId(SoundCatalog.FALLBACK_ID).rawResName)))
+            exo.setMediaItem(MediaItem.fromUri(rawUri(SoundResources.FALLBACK_RES_ID_NAME)))
             exo.prepare()
             exo.volume = 0.9f
             exo.play()
-        } catch (_: Exception) {
-            // Audio is unrecoverable; vibration and the full-screen UI remain.
+        } catch (_: Throwable) {
+            startPanicAudio()
         }
     }
 
     private fun rawUri(rawName: String): Uri {
-        val resId = resources.getIdentifier(rawName, "raw", packageName)
+        val resId = SoundResources.resIdFor(rawName)
         return Uri.parse("android.resource://$packageName/$resId")
     }
 
     // ------------------------------------------------------------- vibration
 
     private fun startVibration(patternId: Int) {
-        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-        vibrator = v
-        if (!v.hasVibrator()) return
-        val pattern = when (patternId) {
-            1 -> longArrayOf(0, 250, 250, 250, 250, 800) // triple knock
-            2 -> longArrayOf(0, 1200, 300)               // long steady
-            else -> longArrayOf(0, 500, 500)             // classic pulse
-        }
         try {
+            val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            vibrator = v
+            if (!v.hasVibrator()) return
+            val pattern = when (patternId) {
+                1 -> longArrayOf(0, 250, 250, 250, 250, 800) // triple knock
+                2 -> longArrayOf(0, 1200, 300)               // long steady
+                else -> longArrayOf(0, 500, 500)             // classic pulse
+            }
             v.vibrate(VibrationEffect.createWaveform(pattern, 0))
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
     }
 
@@ -313,7 +444,7 @@ class AlarmRingingService : Service() {
                 cameraManager.getCameraCharacteristics(id)
                     .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         } ?: return
         torchCameraId = cameraId
@@ -324,7 +455,7 @@ class AlarmRingingService : Service() {
                 on = !on
                 try {
                     cameraManager.setTorchMode(cameraId, on)
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
                     // Camera busy (e.g. workout mission is using it): stop pulsing.
                     return@launch
                 }
@@ -340,7 +471,7 @@ class AlarmRingingService : Service() {
         torchCameraId = null
         try {
             (getSystemService(Context.CAMERA_SERVICE) as CameraManager).setTorchMode(id, false)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
     }
 
@@ -353,14 +484,14 @@ class AlarmRingingService : Service() {
                 // Safety timeout slightly above the longest auto-silence window.
                 acquire(31 * 60_000L)
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
     }
 
     private fun releaseWakeLock() {
         try {
             if (wakeLock?.isHeld == true) wakeLock?.release()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
         wakeLock = null
     }
@@ -373,8 +504,11 @@ class AlarmRingingService : Service() {
         val eventId = activeEventId
         if (eventId > 0) {
             scope.launch {
-                historyRepository.getById(eventId)?.let {
-                    historyRepository.update(it.copy(missionStartedAtMs = missionStartedAtMs))
+                try {
+                    historyRepository.getById(eventId)?.let {
+                        historyRepository.update(it.copy(missionStartedAtMs = missionStartedAtMs))
+                    }
+                } catch (_: Throwable) {
                 }
             }
         }
@@ -387,22 +521,25 @@ class AlarmRingingService : Service() {
         val alarm = activeAlarm ?: return
         val eventId = activeEventId
         scope.launch {
-            if (eventId > 0) {
-                historyRepository.getById(eventId)?.let {
-                    historyRepository.update(
-                        it.copy(
-                            dismissedAtMs = System.currentTimeMillis(),
-                            outcome = outcome,
-                            totalReps = totalReps,
-                            missionSummary = summary,
-                        ),
-                    )
+            try {
+                if (eventId > 0) {
+                    historyRepository.getById(eventId)?.let {
+                        historyRepository.update(
+                            it.copy(
+                                dismissedAtMs = System.currentTimeMillis(),
+                                outcome = outcome,
+                                totalReps = totalReps,
+                                missionSummary = summary,
+                            ),
+                        )
+                    }
                 }
-            }
-            // Re-assert the next occurrence (defensive; also covers edits
-            // made while ringing).
-            alarmRepository.getById(alarm.id)?.let { fresh ->
-                if (fresh.enabled) scheduler.schedule(fresh)
+                // Re-assert the next occurrence (defensive; also covers edits
+                // made while ringing).
+                alarmRepository.getById(alarm.id)?.let { fresh ->
+                    if (fresh.enabled) scheduler.schedule(fresh)
+                }
+            } catch (_: Throwable) {
             }
             stopRingingInternal()
             advanceQueueOrStop()
@@ -419,13 +556,21 @@ class AlarmRingingService : Service() {
         try {
             player?.stop()
             player?.release()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
         player = null
 
         try {
+            panicPlayer?.stop()
+            panicPlayer?.release()
+        } catch (_: Throwable) {
+        }
+        panicPlayer = null
+        fallbackToneActive = false
+
+        try {
             vibrator?.cancel()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
         vibrator = null
 
@@ -442,7 +587,7 @@ class AlarmRingingService : Service() {
         try {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, previousAlarmVolume, 0)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
         previousAlarmVolume = -1
     }
@@ -450,6 +595,7 @@ class AlarmRingingService : Service() {
     private fun stopSelfIfIdle() {
         if (activeAlarm == null && ringQueue.activeId == null && ringQueue.queuedCount == 0) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            foregroundStarted = false
             stopSelf()
         }
     }
@@ -471,21 +617,27 @@ class AlarmRingingService : Service() {
         const val EXTRA_MISSION_SUMMARY = "mission_summary"
 
         fun missionStarted(context: Context) {
-            context.startService(
-                Intent(context, AlarmRingingService::class.java).apply {
-                    action = ACTION_MISSION_STARTED
-                },
-            )
+            try {
+                context.startService(
+                    Intent(context, AlarmRingingService::class.java).apply {
+                        action = ACTION_MISSION_STARTED
+                    },
+                )
+            } catch (_: Throwable) {
+            }
         }
 
         fun dismiss(context: Context, emergency: Boolean, totalReps: Int, summary: String) {
-            context.startService(
-                Intent(context, AlarmRingingService::class.java).apply {
-                    action = if (emergency) ACTION_DISMISS_EMERGENCY else ACTION_DISMISS_COMPLETED
-                    putExtra(EXTRA_TOTAL_REPS, totalReps)
-                    putExtra(EXTRA_MISSION_SUMMARY, summary)
-                },
-            )
+            try {
+                context.startService(
+                    Intent(context, AlarmRingingService::class.java).apply {
+                        action = if (emergency) ACTION_DISMISS_EMERGENCY else ACTION_DISMISS_COMPLETED
+                        putExtra(EXTRA_TOTAL_REPS, totalReps)
+                        putExtra(EXTRA_MISSION_SUMMARY, summary)
+                    },
+                )
+            } catch (_: Throwable) {
+            }
         }
     }
 }

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Belt-and-braces: never let the resource shrinker drop alarm audio. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/alarm_reactor,@raw/alarm_power_pulse,@raw/alarm_digital_siren,@raw/alarm_heavy_bell,@raw/alarm_morning_horn,@raw/alarm_electric_rise,@raw/alarm_rapid_beep,@raw/alarm_emergency_buzz" />

@@ -70,13 +70,24 @@ fun PoseCameraPreview(
     }
 
     LaunchedEffect(useFrontCamera) {
+        // Heavy model load happens off the main thread; the camera preview
+        // binds regardless so the user immediately sees themselves, and
+        // counting starts as soon as the detector is ready.
+        val modelOk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            analyzer.initialize()
+        }
+        if (!modelOk) {
+            onBindFailed(
+                IllegalStateException(
+                    "Pose detector could not start" +
+                        (analyzer.initError?.let { ": $it" } ?: ""),
+                ),
+            )
+            return@LaunchedEffect
+        }
         try {
             val provider = cameraProvider(context)
             provider.unbindAll()
-            if (!analyzer.isReady) {
-                onBindFailed(IllegalStateException("Pose model unavailable"))
-                return@LaunchedEffect
-            }
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = previewView.surfaceProvider
             }
