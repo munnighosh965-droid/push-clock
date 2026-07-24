@@ -5,7 +5,9 @@
 -keep class com.google.protobuf.** { *; }
 -dontwarn com.google.mediapipe.**
 -dontwarn com.google.auto.value.**
--dontwarn javax.lang.model.element.Modifier
+# MediaPipe shades javapoet/autovalue which reference compile-time-only
+# javax.lang.model classes never used at runtime on Android.
+-dontwarn javax.lang.model.**
 
 # ZXing (pure Java, reflection-free, but keep result parsers used indirectly).
 -dontwarn com.google.zxing.**
