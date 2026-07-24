@@ -76,8 +76,8 @@ class AlarmRingingService : Service() {
     private var missionStartedAtMs: Long? = null
     private var previousAlarmVolume: Int = -1
 
-    /** Alarms that fired while another one was ringing. */
-    private val queue = ArrayDeque<Long>()
+    /** Overlap/dedupe queue for simultaneous alarms. */
+    private val ringQueue = RingQueue()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -105,24 +105,35 @@ class AlarmRingingService : Service() {
     // ------------------------------------------------------------------ ring
 
     private fun onRingRequested(alarmId: Long) {
-        if (activeAlarm != null) {
-            // Another alarm is already ringing: queue it, never start a
-            // second audio pipeline.
-            if (activeAlarm?.id != alarmId && !queue.contains(alarmId)) {
-                queue.addLast(alarmId)
-                stateHolder.updateQueuedCount(queue.size)
-            }
-            return
-        }
+        // The queue guarantees a single audio pipeline and ignores duplicate
+        // deliveries of the same alarm id.
+        val startNow = ringQueue.requestRing(alarmId)
+        stateHolder.updateQueuedCount(ringQueue.queuedCount)
+        if (!startNow) return
         scope.launch {
             val alarm = alarmRepository.getById(alarmId)
             if (alarm == null || !alarm.enabled) {
                 // Deleted or disabled after the trigger was armed.
-                stopSelfIfIdle()
+                advanceQueueOrStop()
                 return@launch
             }
             startRinging(alarm)
         }
+    }
+
+    /** Moves to the next ringable queued alarm, or winds the service down. */
+    private suspend fun advanceQueueOrStop() {
+        while (true) {
+            val nextId = ringQueue.finishActive() ?: break
+            val alarm = alarmRepository.getById(nextId)
+            if (alarm != null && alarm.enabled) {
+                stateHolder.updateQueuedCount(ringQueue.queuedCount)
+                startRinging(alarm)
+                return
+            }
+        }
+        stateHolder.set(null)
+        stopSelfIfIdle()
     }
 
     private suspend fun startRinging(alarm: Alarm) {
@@ -153,7 +164,7 @@ class AlarmRingingService : Service() {
                 outcome = WakeOutcome.MISSED,
             ),
         )
-        stateHolder.set(RingingSession(alarm, activeEventId, now, queue.size))
+        stateHolder.set(RingingSession(alarm, activeEventId, now, ringQueue.queuedCount))
 
         // Keep the next occurrence armed even before this one is dismissed.
         if (alarm.isRepeating) {
@@ -394,18 +405,7 @@ class AlarmRingingService : Service() {
                 if (fresh.enabled) scheduler.schedule(fresh)
             }
             stopRingingInternal()
-
-            val next = queue.removeFirstOrNull()
-            if (next != null) {
-                stateHolder.updateQueuedCount(queue.size)
-                val nextAlarm = alarmRepository.getById(next)
-                if (nextAlarm != null && nextAlarm.enabled) {
-                    startRinging(nextAlarm)
-                    return@launch
-                }
-            }
-            stateHolder.set(null)
-            stopSelfIfIdle()
+            advanceQueueOrStop()
         }
     }
 
@@ -448,7 +448,7 @@ class AlarmRingingService : Service() {
     }
 
     private fun stopSelfIfIdle() {
-        if (activeAlarm == null && queue.isEmpty()) {
+        if (activeAlarm == null && ringQueue.activeId == null && ringQueue.queuedCount == 0) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }

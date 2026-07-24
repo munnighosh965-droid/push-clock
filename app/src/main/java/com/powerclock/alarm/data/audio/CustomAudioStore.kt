@@ -60,11 +60,10 @@ class CustomAudioStore @Inject constructor(
     }
 
     /** Only content:// (SAF) and our own private file:// copies are accepted. */
-    fun isValidScheme(uri: Uri): Boolean = when (uri.scheme) {
-        "content" -> true
-        "file" -> uri.path?.startsWith(privateDir.absolutePath) == true
-        else -> false
-    }
+    fun isValidScheme(uri: Uri): Boolean =
+        com.powerclock.alarm.domain.audio.AudioUriPolicy.isAllowed(
+            uri.scheme, uri.path, privateDir.absolutePath,
+        )
 
     suspend fun readMetadata(uri: Uri): AudioTrackInfo? = withContext(Dispatchers.IO) {
         if (!isValidScheme(uri)) return@withContext null
