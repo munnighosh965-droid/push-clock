@@ -1,0 +1,491 @@
+package com.powerclock.alarm.alarmengine
+
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.net.Uri
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.core.app.ServiceCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.powerclock.alarm.data.audio.CustomAudioStore
+import com.powerclock.alarm.data.prefs.SettingsRepository
+import com.powerclock.alarm.data.repo.AlarmRepository
+import com.powerclock.alarm.data.repo.HistoryRepository
+import com.powerclock.alarm.domain.audio.SoundCatalog
+import com.powerclock.alarm.domain.model.Alarm
+import com.powerclock.alarm.domain.model.WakeEvent
+import com.powerclock.alarm.domain.model.WakeOutcome
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.time.ZonedDateTime
+import javax.inject.Inject
+
+/**
+ * Foreground service that owns everything audible/tactile while an alarm
+ * rings: Media3 playback on the alarm stream, vibration, optional torch
+ * pulses, a short wake lock, the ringing notification with its full-screen
+ * intent, the overlap queue, and the safety auto-silence timeout.
+ *
+ * Hard rule: every resource acquired here is released in [stopRingingInternal],
+ * which runs on every exit path including [onDestroy].
+ */
+@AndroidEntryPoint
+class AlarmRingingService : Service() {
+
+    @Inject lateinit var alarmRepository: AlarmRepository
+    @Inject lateinit var historyRepository: HistoryRepository
+    @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var notifications: AlarmNotifications
+    @Inject lateinit var scheduler: AlarmScheduler
+    @Inject lateinit var stateHolder: RingingStateHolder
+    @Inject lateinit var customAudioStore: CustomAudioStore
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    private var player: ExoPlayer? = null
+    private var vibrator: Vibrator? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var torchJob: Job? = null
+    private var volumeRampJob: Job? = null
+    private var autoSilenceJob: Job? = null
+    private var torchCameraId: String? = null
+
+    private var activeAlarm: Alarm? = null
+    private var activeEventId: Long = -1L
+    private var missionStartedAtMs: Long? = null
+    private var previousAlarmVolume: Int = -1
+
+    /** Alarms that fired while another one was ringing. */
+    private val queue = ArrayDeque<Long>()
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_RING -> {
+                val alarmId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
+                if (alarmId > 0L) onRingRequested(alarmId)
+            }
+            ACTION_MISSION_STARTED -> onMissionStarted()
+            ACTION_DISMISS_COMPLETED -> onDismiss(
+                WakeOutcome.COMPLETED,
+                intent.getIntExtra(EXTRA_TOTAL_REPS, 0),
+                intent.getStringExtra(EXTRA_MISSION_SUMMARY) ?: "",
+            )
+            ACTION_DISMISS_EMERGENCY -> onDismiss(
+                WakeOutcome.EMERGENCY,
+                intent.getIntExtra(EXTRA_TOTAL_REPS, 0),
+                intent.getStringExtra(EXTRA_MISSION_SUMMARY) ?: "",
+            )
+        }
+        return START_NOT_STICKY
+    }
+
+    // ------------------------------------------------------------------ ring
+
+    private fun onRingRequested(alarmId: Long) {
+        if (activeAlarm != null) {
+            // Another alarm is already ringing: queue it, never start a
+            // second audio pipeline.
+            if (activeAlarm?.id != alarmId && !queue.contains(alarmId)) {
+                queue.addLast(alarmId)
+                stateHolder.updateQueuedCount(queue.size)
+            }
+            return
+        }
+        scope.launch {
+            val alarm = alarmRepository.getById(alarmId)
+            if (alarm == null || !alarm.enabled) {
+                // Deleted or disabled after the trigger was armed.
+                stopSelfIfIdle()
+                return@launch
+            }
+            startRinging(alarm)
+        }
+    }
+
+    private suspend fun startRinging(alarm: Alarm) {
+        val now = System.currentTimeMillis()
+        activeAlarm = alarm
+        missionStartedAtMs = null
+
+        // Foreground first: this must happen quickly after startForegroundService.
+        val notification = notifications.ringingNotification(alarm)
+        ServiceCompat.startForeground(
+            this,
+            AlarmNotifications.NOTIFICATION_ID_RINGING,
+            notification,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            } else {
+                0
+            },
+        )
+
+        // History row is created immediately so even a crash records the ring.
+        activeEventId = historyRepository.insert(
+            WakeEvent(
+                alarmId = alarm.id,
+                alarmLabel = alarm.label,
+                scheduledAtMs = now,
+                rangAtMs = now,
+                outcome = WakeOutcome.MISSED,
+            ),
+        )
+        stateHolder.set(RingingSession(alarm, activeEventId, now, queue.size))
+
+        // Keep the next occurrence armed even before this one is dismissed.
+        if (alarm.isRepeating) {
+            scheduler.schedule(alarm, ZonedDateTime.now().plusSeconds(1))
+        } else {
+            alarmRepository.setEnabled(alarm.id, enabled = false)
+        }
+
+        acquireWakeLock()
+        startAudio(alarm)
+        if (alarm.vibrate) startVibration(alarm.vibrationPatternId)
+        if (alarm.flashlight) startTorchPulses()
+
+        val settings = settingsRepository.current()
+        autoSilenceJob?.cancel()
+        autoSilenceJob = scope.launch {
+            delay(settings.autoSilenceMinutes.coerceIn(5, 30) * 60_000L)
+            onDismiss(WakeOutcome.MISSED, 0, "auto-silenced")
+        }
+    }
+
+    // ----------------------------------------------------------------- audio
+
+    private suspend fun startAudio(alarm: Alarm) {
+        val settings = settingsRepository.current()
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Heavy Sleeper mode may temporarily raise the alarm stream, with
+        // the user's explicit prior consent, remembering the old value.
+        if (alarm.heavySleeper && settings.allowVolumeOverride) {
+            try {
+                previousAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+            } catch (_: SecurityException) {
+                previousAlarmVolume = -1
+            }
+        }
+
+        val exo = ExoPlayer.Builder(this).build()
+        player = exo
+        exo.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_ALARM)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SONIFICATION)
+                .build(),
+            /* handleAudioFocus = */ true,
+        )
+        exo.repeatMode = Player.REPEAT_MODE_ONE
+        exo.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                // Damaged file, revoked URI, decoder issues... whatever
+                // happened, the guaranteed bundled tone takes over.
+                playFallbackTone()
+            }
+        })
+
+        val mediaItem = resolveMediaItem(alarm)
+        exo.setMediaItem(mediaItem)
+        exo.prepare()
+
+        val targetVolume = (alarm.volumePercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.05f)
+        if (alarm.gradualVolume) {
+            exo.volume = 0.1f
+            volumeRampJob?.cancel()
+            volumeRampJob = scope.launch {
+                val rampSeconds = if (alarm.heavySleeper) 20 else 45
+                val steps = 20
+                for (step in 1..steps) {
+                    if (!isActive) return@launch
+                    delay(rampSeconds * 1000L / steps)
+                    player?.volume = (0.1f + (targetVolume - 0.1f) * step / steps)
+                }
+            }
+        } else {
+            exo.volume = targetVolume
+        }
+        exo.play()
+    }
+
+    private suspend fun resolveMediaItem(alarm: Alarm): MediaItem {
+        // Custom track, only when it is still readable right now.
+        val customUri = alarm.customSoundUri
+        if (alarm.soundId == SoundCatalog.CUSTOM_ID && customUri != null) {
+            val uri = Uri.parse(customUri)
+            if (customAudioStore.isPlayable(uri)) {
+                val clip = MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(alarm.customSoundStartMs.coerceAtLeast(0L))
+                    .build()
+                return MediaItem.Builder().setUri(uri).setClippingConfiguration(clip).build()
+            }
+        }
+        val sound = if (alarm.randomSound) {
+            SoundCatalog.randomSound()
+        } else {
+            SoundCatalog.byId(alarm.soundId)
+        }
+        return MediaItem.fromUri(rawUri(sound.rawResName))
+    }
+
+    private fun playFallbackTone() {
+        val exo = player ?: return
+        try {
+            exo.setMediaItem(MediaItem.fromUri(rawUri(SoundCatalog.byId(SoundCatalog.FALLBACK_ID).rawResName)))
+            exo.prepare()
+            exo.volume = 0.9f
+            exo.play()
+        } catch (_: Exception) {
+            // Audio is unrecoverable; vibration and the full-screen UI remain.
+        }
+    }
+
+    private fun rawUri(rawName: String): Uri {
+        val resId = resources.getIdentifier(rawName, "raw", packageName)
+        return Uri.parse("android.resource://$packageName/$resId")
+    }
+
+    // ------------------------------------------------------------- vibration
+
+    private fun startVibration(patternId: Int) {
+        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        vibrator = v
+        if (!v.hasVibrator()) return
+        val pattern = when (patternId) {
+            1 -> longArrayOf(0, 250, 250, 250, 250, 800) // triple knock
+            2 -> longArrayOf(0, 1200, 300)               // long steady
+            else -> longArrayOf(0, 500, 500)             // classic pulse
+        }
+        try {
+            v.vibrate(VibrationEffect.createWaveform(pattern, 0))
+        } catch (_: Exception) {
+        }
+    }
+
+    // ------------------------------------------------------------ flashlight
+
+    private fun startTorchPulses() {
+        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val cameraId = try {
+            cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        } catch (_: Exception) {
+            null
+        } ?: return
+        torchCameraId = cameraId
+        torchJob?.cancel()
+        torchJob = scope.launch {
+            var on = false
+            while (isActive) {
+                on = !on
+                try {
+                    cameraManager.setTorchMode(cameraId, on)
+                } catch (_: Exception) {
+                    // Camera busy (e.g. workout mission is using it): stop pulsing.
+                    return@launch
+                }
+                delay(600)
+            }
+        }
+    }
+
+    private fun stopTorch() {
+        torchJob?.cancel()
+        torchJob = null
+        val id = torchCameraId ?: return
+        torchCameraId = null
+        try {
+            (getSystemService(Context.CAMERA_SERVICE) as CameraManager).setTorchMode(id, false)
+        } catch (_: Exception) {
+        }
+    }
+
+    // -------------------------------------------------------------- wake lock
+
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "powerclock:ringing").apply {
+                // Safety timeout slightly above the longest auto-silence window.
+                acquire(31 * 60_000L)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Exception) {
+        }
+        wakeLock = null
+    }
+
+    // --------------------------------------------------------------- dismiss
+
+    private fun onMissionStarted() {
+        if (missionStartedAtMs != null) return
+        missionStartedAtMs = System.currentTimeMillis()
+        val eventId = activeEventId
+        if (eventId > 0) {
+            scope.launch {
+                historyRepository.getById(eventId)?.let {
+                    historyRepository.update(it.copy(missionStartedAtMs = missionStartedAtMs))
+                }
+            }
+        }
+        // Torch pulses would fight the workout camera; stop them once the
+        // user is engaged.
+        stopTorch()
+    }
+
+    private fun onDismiss(outcome: WakeOutcome, totalReps: Int, summary: String) {
+        val alarm = activeAlarm ?: return
+        val eventId = activeEventId
+        scope.launch {
+            if (eventId > 0) {
+                historyRepository.getById(eventId)?.let {
+                    historyRepository.update(
+                        it.copy(
+                            dismissedAtMs = System.currentTimeMillis(),
+                            outcome = outcome,
+                            totalReps = totalReps,
+                            missionSummary = summary,
+                        ),
+                    )
+                }
+            }
+            // Re-assert the next occurrence (defensive; also covers edits
+            // made while ringing).
+            alarmRepository.getById(alarm.id)?.let { fresh ->
+                if (fresh.enabled) scheduler.schedule(fresh)
+            }
+            stopRingingInternal()
+
+            val next = queue.removeFirstOrNull()
+            if (next != null) {
+                stateHolder.updateQueuedCount(queue.size)
+                val nextAlarm = alarmRepository.getById(next)
+                if (nextAlarm != null && nextAlarm.enabled) {
+                    startRinging(nextAlarm)
+                    return@launch
+                }
+            }
+            stateHolder.set(null)
+            stopSelfIfIdle()
+        }
+    }
+
+    /** Releases every acquired resource. Safe to call multiple times. */
+    private fun stopRingingInternal() {
+        autoSilenceJob?.cancel()
+        autoSilenceJob = null
+        volumeRampJob?.cancel()
+        volumeRampJob = null
+
+        try {
+            player?.stop()
+            player?.release()
+        } catch (_: Exception) {
+        }
+        player = null
+
+        try {
+            vibrator?.cancel()
+        } catch (_: Exception) {
+        }
+        vibrator = null
+
+        stopTorch()
+        restoreAlarmVolume()
+        releaseWakeLock()
+        activeAlarm = null
+        activeEventId = -1L
+        missionStartedAtMs = null
+    }
+
+    private fun restoreAlarmVolume() {
+        if (previousAlarmVolume < 0) return
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, previousAlarmVolume, 0)
+        } catch (_: Exception) {
+        }
+        previousAlarmVolume = -1
+    }
+
+    private fun stopSelfIfIdle() {
+        if (activeAlarm == null && queue.isEmpty()) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    override fun onDestroy() {
+        stopRingingInternal()
+        stateHolder.set(null)
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    companion object {
+        const val ACTION_RING = "com.powerclock.alarm.service.RING"
+        const val ACTION_MISSION_STARTED = "com.powerclock.alarm.service.MISSION_STARTED"
+        const val ACTION_DISMISS_COMPLETED = "com.powerclock.alarm.service.DISMISS_COMPLETED"
+        const val ACTION_DISMISS_EMERGENCY = "com.powerclock.alarm.service.DISMISS_EMERGENCY"
+        const val EXTRA_ALARM_ID = "alarm_id"
+        const val EXTRA_TOTAL_REPS = "total_reps"
+        const val EXTRA_MISSION_SUMMARY = "mission_summary"
+
+        fun missionStarted(context: Context) {
+            context.startService(
+                Intent(context, AlarmRingingService::class.java).apply {
+                    action = ACTION_MISSION_STARTED
+                },
+            )
+        }
+
+        fun dismiss(context: Context, emergency: Boolean, totalReps: Int, summary: String) {
+            context.startService(
+                Intent(context, AlarmRingingService::class.java).apply {
+                    action = if (emergency) ACTION_DISMISS_EMERGENCY else ACTION_DISMISS_COMPLETED
+                    putExtra(EXTRA_TOTAL_REPS, totalReps)
+                    putExtra(EXTRA_MISSION_SUMMARY, summary)
+                },
+            )
+        }
+    }
+}
