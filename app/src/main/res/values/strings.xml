@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Power Clock</string>
+    <string name="tagline">WAKE. MOVE. WIN.</string>
+
+    <string name="channel_ringing_name">Ringing alarms</string>
+    <string name="channel_ringing_desc">Shown while a Power Clock alarm is ringing. Keep this enabled so alarms can wake you.</string>
+    <string name="channel_reminders_name">Bedtime reminders</string>
+    <string name="channel_reminders_desc">Optional gentle reminders to head to bed on time.</string>
+
+    <string name="notif_ringing_title">Alarm ringing — complete your mission</string>
+    <string name="notif_bedtime_title">Bedtime is coming up</string>
+    <string name="notif_bedtime_text">Winding down now makes tomorrow\'s wake-up easier.</string>
+    <string name="default_alarm_label">Wake-up alarm</string>
+
+    <string name="cd_app_logo">Power Clock logo</string>
+</resources>
