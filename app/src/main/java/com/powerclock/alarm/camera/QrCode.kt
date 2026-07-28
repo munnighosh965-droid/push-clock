@@ -71,8 +71,8 @@ object QrCardGenerator {
     fun render(content: String, sizePx: Int = 800): Bitmap {
         val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx)
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        val dark = 0xFF080B12.toInt()
-        val light = 0xFFF7F9FC.toInt()
+        val dark = 0xFF021024.toInt()
+        val light = 0xFFC1E8FF.toInt()
         for (x in 0 until sizePx) {
             for (y in 0 until sizePx) {
                 bmp.setPixel(x, y, if (matrix.get(x, y)) dark else light)

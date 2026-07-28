@@ -52,18 +52,21 @@ class AlarmNotifications @Inject constructor(
         manager.createNotificationChannel(reminders)
     }
 
-    fun ringingNotification(alarm: Alarm): Notification {
+    private fun fullScreenPending(alarmId: Long): PendingIntent {
         val fullScreenIntent = Intent(context, RingingActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(RingingActivity.EXTRA_ALARM_ID, alarm.id)
+            putExtra(RingingActivity.EXTRA_ALARM_ID, alarmId)
         }
-        val fullScreenPending = PendingIntent.getActivity(
+        return PendingIntent.getActivity(
             context,
             9001,
             fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val label = alarm.label.ifBlank { context.getString(R.string.default_alarm_label) }
+    }
+
+    private fun ringingBuilder(alarmId: Long, label: String): NotificationCompat.Builder {
+        val pending = fullScreenPending(alarmId)
         return NotificationCompat.Builder(context, CHANNEL_RINGING)
             .setSmallIcon(R.drawable.ic_stat_powerclock)
             .setContentTitle(context.getString(R.string.notif_ringing_title))
@@ -73,10 +76,34 @@ class AlarmNotifications @Inject constructor(
             .setOngoing(true)
             .setAutoCancel(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(fullScreenPending, true)
-            .setContentIntent(fullScreenPending)
+            .setFullScreenIntent(pending, true)
+            .setContentIntent(pending)
             .setSilent(true)
-            .build()
+    }
+
+    fun ringingNotification(alarm: Alarm): Notification = ringingBuilder(
+        alarm.id,
+        alarm.label.ifBlank { context.getString(R.string.default_alarm_label) },
+    ).build()
+
+    /** Provisional notification shown before the alarm row has been loaded. */
+    fun genericRingingNotification(): Notification =
+        ringingBuilder(-1L, context.getString(R.string.default_alarm_label)).build()
+
+    /**
+     * Last-resort path when the ringing service cannot be started at all
+     * (e.g. OEM background-start restrictions): a high-priority full-screen
+     * alarm notification that opens the ringing UI, which then starts the
+     * service from the foreground where it is always allowed.
+     */
+    fun postServiceFallbackNotification(alarmId: Long) {
+        try {
+            manager.notify(
+                NOTIFICATION_ID_RINGING,
+                ringingBuilder(alarmId, context.getString(R.string.default_alarm_label)).build(),
+            )
+        } catch (_: Throwable) {
+        }
     }
 
     fun bedtimeReminder() {

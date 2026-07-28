@@ -61,11 +61,24 @@ fun RingingRoot(
 
     // If the service session disappears while we are not on the success
     // screen, the alarm ended elsewhere (auto-silence or a queued switch).
+    // A generous grace period covers slow service cold starts on throttled
+    // devices, where this activity may open before the session exists.
     LaunchedEffect(session, run.phase) {
         if (session == null && run.phase != RingingPhase.SUCCESS) {
-            delay(500)
+            delay(8000)
             onFinished()
         }
+    }
+
+    if (session == null && run.phase == RingingPhase.RINGING) {
+        // Waiting for the ringing service to publish its session.
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Starting alarm…", style = MaterialTheme.typography.titleLarge)
+        }
+        return
     }
 
     when (run.phase) {

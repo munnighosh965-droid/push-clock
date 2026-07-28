@@ -33,7 +33,15 @@ class AlarmReceiver : BroadcastReceiver() {
                     action = AlarmRingingService.ACTION_RING
                     putExtra(AlarmRingingService.EXTRA_ALARM_ID, alarmId)
                 }
-                ContextCompat.startForegroundService(context, serviceIntent)
+                try {
+                    ContextCompat.startForegroundService(context, serviceIntent)
+                } catch (_: Throwable) {
+                    // Some OEM builds (MIUI/HyperOS without "Autostart")
+                    // block background service starts. Fall back to a
+                    // full-screen alarm notification; opening it starts the
+                    // service from the foreground, which is always allowed.
+                    notifications.postServiceFallbackNotification(alarmId)
+                }
             }
 
             ACTION_BEDTIME_REMINDER -> {
@@ -42,6 +50,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
                         scheduler.rescheduleBedtimeReminder()
+                    } catch (_: Throwable) {
                     } finally {
                         pending.finish()
                     }

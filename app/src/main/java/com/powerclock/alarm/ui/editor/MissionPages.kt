@@ -376,6 +376,8 @@ internal fun WorkoutTestPage(
                 PackageManager.PERMISSION_GRANTED,
         )
     }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var retryKey by remember { mutableIntStateOf(0) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> cameraGranted = granted }
@@ -390,15 +392,46 @@ internal fun WorkoutTestPage(
             }
             Text("Test: ${missionShortName(config.type.name)}", style = MaterialTheme.typography.headlineSmall)
         }
-        if (cameraGranted) {
-            WorkoutLiveView(
-                config = config,
-                spokenCues = false,
-                testMode = true,
-                onComplete = onBack,
-                onCannotRun = { onBack() },
-                modifier = Modifier.fillMaxSize(),
-            )
+        val error = cameraError
+        if (error != null) {
+            Column(Modifier.padding(20.dp)) {
+                Text(
+                    "The camera could not start",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Details: $error",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Close any other app that may be using the camera, then try again. " +
+                        "During a real alarm this mission is automatically replaced with your fallback, so the alarm always stays dismissable.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        cameraError = null
+                        retryKey++
+                    }) { Text("Try again") }
+                    OutlinedButton(onClick = onBack) { Text("Back") }
+                }
+            }
+        } else if (cameraGranted) {
+            androidx.compose.runtime.key(retryKey) {
+                WorkoutLiveView(
+                    config = config,
+                    spokenCues = false,
+                    testMode = true,
+                    onComplete = onBack,
+                    onCannotRun = { reason -> cameraError = reason },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
             Column(Modifier.padding(20.dp)) {
                 Text(

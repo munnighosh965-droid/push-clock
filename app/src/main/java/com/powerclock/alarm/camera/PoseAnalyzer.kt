@@ -45,35 +45,56 @@ class PoseAnalyzer(
         BodyPoint.RIGHT_ANKLE to 28,
     )
 
+    private val appContext = context.applicationContext
+
     @Volatile
     private var closed = false
 
-    private val landmarker: PoseLandmarker? = try {
-        val options = PoseLandmarker.PoseLandmarkerOptions.builder()
-            .setBaseOptions(
-                BaseOptions.builder()
-                    .setModelAssetPath("pose_landmarker_lite.task")
-                    .build(),
-            )
-            .setRunningMode(RunningMode.LIVE_STREAM)
-            .setMinPoseDetectionConfidence(0.5f)
-            .setMinPosePresenceConfidence(0.5f)
-            .setMinTrackingConfidence(0.5f)
-            .setNumPoses(1)
-            .setResultListener { result, _ -> deliver(result) }
-            .setErrorListener { e -> onError(e) }
-            .build()
-        PoseLandmarker.createFromOptions(context, options)
-    } catch (e: Throwable) {
-        onError(e)
-        null
-    }
+    @Volatile
+    private var landmarker: PoseLandmarker? = null
+
+    @Volatile
+    var initError: String? = null
+        private set
 
     val isReady: Boolean get() = landmarker != null
+
+    /**
+     * Loads the pose model. Blocking (model load + TFLite init); call from a
+     * background thread. Returns true on success. Safe to call repeatedly.
+     */
+    fun initialize(): Boolean {
+        if (landmarker != null) return true
+        if (closed) return false
+        return try {
+            val options = PoseLandmarker.PoseLandmarkerOptions.builder()
+                .setBaseOptions(
+                    BaseOptions.builder()
+                        .setModelAssetPath("pose_landmarker_lite.task")
+                        .build(),
+                )
+                .setRunningMode(RunningMode.LIVE_STREAM)
+                .setMinPoseDetectionConfidence(0.5f)
+                .setMinPosePresenceConfidence(0.5f)
+                .setMinTrackingConfidence(0.5f)
+                .setNumPoses(1)
+                .setResultListener { result, _ -> deliver(result) }
+                .setErrorListener { e -> onError(e) }
+                .build()
+            landmarker = PoseLandmarker.createFromOptions(appContext, options)
+            initError = null
+            true
+        } catch (e: Throwable) {
+            initError = e.message ?: e.javaClass.simpleName
+            onError(e)
+            false
+        }
+    }
 
     override fun analyze(image: ImageProxy) {
         val lm = landmarker
         if (lm == null || closed) {
+            // Model still loading (or failed): drop the frame quietly.
             image.close()
             return
         }

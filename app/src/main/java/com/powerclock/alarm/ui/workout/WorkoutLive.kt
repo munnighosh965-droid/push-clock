@@ -42,8 +42,8 @@ import com.powerclock.alarm.domain.pose.PoseHint
 import com.powerclock.alarm.domain.pose.PoseSample
 import com.powerclock.alarm.domain.pose.RepCounter
 import com.powerclock.alarm.camera.PoseCameraPreview
-import com.powerclock.alarm.ui.theme.ElectricLime
-import com.powerclock.alarm.ui.theme.PowerBlue
+import com.powerclock.alarm.ui.theme.Glacier
+import com.powerclock.alarm.ui.theme.Horizon
 import java.util.Locale
 
 private val SKELETON_EDGES = listOf(
@@ -152,7 +152,7 @@ fun WorkoutLiveView(
             Text(
                 "$reps / ${config.target}",
                 style = MaterialTheme.typography.displayMedium,
-                color = ElectricLime,
+                color = Glacier,
             )
             Text(
                 "${(config.target - reps).coerceAtLeast(0)} to go",
@@ -164,7 +164,7 @@ fun WorkoutLiveView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                color = PowerBlue,
+                color = Horizon,
                 trackColor = Color.White.copy(alpha = 0.2f),
             )
         }
@@ -238,7 +238,7 @@ private fun SkeletonOverlay(
             val pb = s[b] ?: continue
             if (pa.visibility < 0.4f || pb.visibility < 0.4f) continue
             drawLine(
-                color = ElectricLime.copy(alpha = 0.8f),
+                color = Glacier.copy(alpha = 0.8f),
                 start = mapPoint(pa),
                 end = mapPoint(pb),
                 strokeWidth = 6f,
@@ -247,7 +247,7 @@ private fun SkeletonOverlay(
         }
         for (p in s.points.values) {
             if (p.visibility < 0.4f) continue
-            drawCircle(color = PowerBlue, radius = 9f, center = mapPoint(p))
+            drawCircle(color = Horizon, radius = 9f, center = mapPoint(p))
         }
     }
 }

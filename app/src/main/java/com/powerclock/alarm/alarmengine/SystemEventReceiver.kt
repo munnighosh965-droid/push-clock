@@ -37,6 +37,9 @@ class SystemEventReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 scheduler.rescheduleAll()
+            } catch (_: Throwable) {
+                // Never crash on a system broadcast; the app re-arms alarms
+                // again on next launch.
             } finally {
                 pending.finish()
             }

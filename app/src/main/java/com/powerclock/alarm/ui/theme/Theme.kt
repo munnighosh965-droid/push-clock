@@ -14,51 +14,53 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Brand palette.
-val Midnight = Color(0xFF080B12)
-val DeepSurface = Color(0xFF111827)
-val ElectricLime = Color(0xFFC7FF45)
-val PowerBlue = Color(0xFF4DA3FF)
-val WarmWhite = Color(0xFFF7F9FC)
+// Brand palette — deep ocean blues.
+val Midnight = Color(0xFF021024)      // near-black navy background
+val DeepSurface = Color(0xFF052659)   // deep navy surfaces
+val Horizon = Color(0xFF5483B3)       // medium steel blue
+val Mist = Color(0xFF7DA0CA)          // soft powder blue
+val Glacier = Color(0xFFC1E8FF)       // pale ice blue highlight
+val WarmWhite = Color(0xFFF4F9FF)
 val AlertRed = Color(0xFFFF5A5F)
 
 private val DarkColors = darkColorScheme(
-    primary = ElectricLime,
+    primary = Glacier,
     onPrimary = Midnight,
-    primaryContainer = Color(0xFF2A3320),
-    onPrimaryContainer = ElectricLime,
-    secondary = PowerBlue,
+    primaryContainer = Color(0xFF0A3A73),
+    onPrimaryContainer = Glacier,
+    secondary = Mist,
     onSecondary = Midnight,
-    secondaryContainer = Color(0xFF16283E),
-    onSecondaryContainer = PowerBlue,
-    tertiary = WarmWhite,
+    secondaryContainer = Color(0xFF073066),
+    onSecondaryContainer = Mist,
+    tertiary = Horizon,
     background = Midnight,
     onBackground = WarmWhite,
     surface = DeepSurface,
     onSurface = WarmWhite,
-    surfaceVariant = Color(0xFF1B2436),
-    onSurfaceVariant = Color(0xFFB9C2D0),
-    outline = Color(0xFF3A4557),
+    surfaceVariant = Color(0xFF0A3161),
+    onSurfaceVariant = Mist,
+    outline = Horizon,
     error = AlertRed,
     onError = WarmWhite,
 )
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF4A6B00),
-    onPrimary = WarmWhite,
-    primaryContainer = Color(0xFFE4FFAD),
-    onPrimaryContainer = Color(0xFF1A2600),
-    secondary = Color(0xFF1E62A8),
+    primary = Color(0xFF052659),
+    onPrimary = Glacier,
+    primaryContainer = Glacier,
+    onPrimaryContainer = Midnight,
+    secondary = Horizon,
     onSecondary = WarmWhite,
-    secondaryContainer = Color(0xFFD5E7FB),
-    onSecondaryContainer = Color(0xFF0B2A47),
-    background = WarmWhite,
-    onBackground = Color(0xFF15181E),
+    secondaryContainer = Color(0xFFDCEFFE),
+    onSecondaryContainer = Color(0xFF06264F),
+    tertiary = Mist,
+    background = Color(0xFFF2F8FF),
+    onBackground = Color(0xFF0B1626),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF15181E),
-    surfaceVariant = Color(0xFFE8ECF3),
-    onSurfaceVariant = Color(0xFF454C57),
-    outline = Color(0xFF9AA3B0),
+    onSurface = Color(0xFF0B1626),
+    surfaceVariant = Color(0xFFE1EDF9),
+    onSurfaceVariant = Color(0xFF3D5876),
+    outline = Color(0xFF8FA9C4),
     error = Color(0xFFC0353A),
     onError = WarmWhite,
 )
