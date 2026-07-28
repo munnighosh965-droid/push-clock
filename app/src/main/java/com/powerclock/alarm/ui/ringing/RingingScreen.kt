@@ -1,7 +1,12 @@
 package com.powerclock.alarm.ui.ringing
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -84,10 +89,20 @@ fun RingingRoot(
     when (run.phase) {
         RingingPhase.RINGING -> {
             val s = session ?: return
+            val workoutRequired = viewModel.workoutRequired
+            // In strict mode the mission starts by itself: staring at the
+            // ringing face is not a way to avoid the workout.
+            LaunchedEffect(workoutRequired, s.alarm.id) {
+                if (workoutRequired) {
+                    delay(5000)
+                    viewModel.beginMissions()
+                }
+            }
             RingingFace(
                 label = s.alarm.label,
                 queuedCount = s.queuedCount,
-                hasMissions = s.alarm.missions.isNotEmpty(),
+                hasMissions = s.alarm.missions.isNotEmpty() || workoutRequired,
+                workoutRequired = workoutRequired,
                 reduceMotion = rememberReducedMotion(settings.reduceMotion),
                 onStart = viewModel::beginMissions,
                 onEmergency = viewModel::emergencyDismiss,
@@ -112,6 +127,7 @@ private fun RingingFace(
     label: String,
     queuedCount: Int,
     hasMissions: Boolean,
+    workoutRequired: Boolean,
     reduceMotion: Boolean,
     onStart: () -> Unit,
     onEmergency: () -> Unit,
@@ -184,6 +200,17 @@ private fun RingingFace(
         }
 
         Column(modifier = Modifier.fillMaxWidth()) {
+            if (workoutRequired) {
+                Text(
+                    "Workout required — starting automatically",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                )
+            }
             Button(
                 onClick = onStart,
                 modifier = Modifier
@@ -191,14 +218,18 @@ private fun RingingFace(
                     .sizeIn(minHeight = 64.dp),
             ) {
                 Text(
-                    if (hasMissions) "Start mission" else "I'm up — dismiss",
+                    if (hasMissions) "Start workout now" else "I'm up — dismiss",
                     style = MaterialTheme.typography.titleLarge,
                 )
             }
             Spacer(Modifier.height(12.dp))
             HoldToConfirmButton(
-                label = "Emergency dismiss (hold 10s)",
-                holdSeconds = 10,
+                label = if (workoutRequired) {
+                    "Emergency dismiss (hold 20s)"
+                } else {
+                    "Emergency dismiss (hold 10s)"
+                },
+                holdSeconds = if (workoutRequired) 20 else 10,
                 onConfirmed = { confirmEmergency = true },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -234,18 +265,42 @@ private fun MissionHost(viewModel: RingingViewModel) {
     val context = LocalContext.current
     val mission = run.current ?: return
     var confirmEmergency by remember { mutableStateOf(false) }
+    val workoutRequired = viewModel.workoutRequired
 
-    // Camera-dependent missions are replaced automatically when permission
-    // is missing; the alarm must never be impossible to dismiss.
-    LaunchedEffect(mission) {
-        if (mission.type.needsCamera) {
-            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
-            } else if (mission.type == MissionType.QR_SCAN && settings.qrCardId.isBlank()) {
-                viewModel.replaceCurrentMission(FallbackSelector.FailureReason.SENSOR_UNAVAILABLE)
-            }
+    fun cameraGranted(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+    var permissionState by remember(mission) {
+        mutableStateOf(
+            if (!mission.type.needsCamera || cameraGranted()) {
+                CameraGate.READY
+            } else {
+                CameraGate.NEEDS_PERMISSION
+            },
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        permissionState = if (granted) CameraGate.READY else CameraGate.DENIED
+    }
+
+    // The camera permission is asked for right here on the ringing screen
+    // (the activity shows over the lock screen), so a missing grant no longer
+    // silently cancels the workout.
+    LaunchedEffect(mission, permissionState) {
+        if (permissionState == CameraGate.NEEDS_PERMISSION) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+        if (permissionState == CameraGate.DENIED && !workoutRequired) {
+            viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
+        }
+        if (permissionState == CameraGate.READY &&
+            mission.type == MissionType.QR_SCAN &&
+            settings.qrCardId.isBlank()
+        ) {
+            viewModel.replaceCurrentMission(FallbackSelector.FailureReason.SENSOR_UNAVAILABLE)
         }
     }
 
@@ -265,7 +320,24 @@ private fun MissionHost(viewModel: RingingViewModel) {
         }
 
         val content: @Composable () -> Unit = {
-            when (mission.type) {
+            when {
+                mission.type.needsCamera && permissionState != CameraGate.READY -> CameraGateScreen(
+                    denied = permissionState == CameraGate.DENIED,
+                    onAllow = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    onOpenSettings = {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    },
+                    onRecheck = {
+                        permissionState = if (cameraGranted()) CameraGate.READY else CameraGate.DENIED
+                    },
+                )
+
+                else -> when (mission.type) {
                 MissionType.MATH -> MathMissionScreen(mission) { viewModel.onMissionCompleted() }
                 MissionType.MEMORY -> MemoryMissionScreen(mission) { viewModel.onMissionCompleted() }
                 MissionType.TYPING -> TypingMissionScreen(mission) { viewModel.onMissionCompleted() }
@@ -281,17 +353,19 @@ private fun MissionHost(viewModel: RingingViewModel) {
                     onComplete = { viewModel.onMissionCompleted() },
                     onCameraFailed = { reason -> viewModel.replaceCurrentMission(reason) },
                 )
-                else -> WorkoutLiveView(
-                    config = mission,
-                    spokenCues = settings.spokenCues,
-                    testMode = false,
-                    onComplete = { viewModel.onMissionCompleted(mission.target) },
-                    onCannotRun = {
-                        viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
-                    },
-                    onCannotSafelyExercise = viewModel::cannotSafelyExercise,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                    else -> WorkoutLiveView(
+                        config = mission,
+                        spokenCues = settings.spokenCues,
+                        testMode = false,
+                        onComplete = { viewModel.onMissionCompleted(mission.target) },
+                        onCannotRun = {
+                            viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
+                        },
+                        onCannotSafelyExercise = viewModel::cannotSafelyExercise,
+                        requireWorkout = workoutRequired,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
         androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { content() }
@@ -328,6 +402,55 @@ private fun MissionHost(viewModel: RingingViewModel) {
                 TextButton(onClick = { confirmEmergency = false }) { Text("Back to mission") }
             },
         )
+    }
+}
+
+/** Permission state of a camera mission while the alarm is live. */
+private enum class CameraGate { NEEDS_PERMISSION, DENIED, READY }
+
+@Composable
+private fun CameraGateScreen(
+    denied: Boolean,
+    onAllow: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onRecheck: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("Camera needed to count your reps", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Frames are analysed on this device only — nothing is recorded, saved, or uploaded.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = onAllow,
+            modifier = Modifier
+                .fillMaxWidth()
+                .sizeIn(minHeight = 56.dp),
+        ) { Text("Allow camera") }
+        if (denied) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Permission is blocked. Enable it in Android settings, then tap “I've allowed it”.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                Text("Open app settings")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onRecheck, modifier = Modifier.fillMaxWidth()) {
+                Text("I've allowed it")
+            }
+        }
     }
 }
 

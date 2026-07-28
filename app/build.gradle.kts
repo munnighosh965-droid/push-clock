@@ -49,6 +49,11 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    // MediaPipe memory-maps the pose model straight out of the APK; a
+    // compressed asset fails to load and the camera mission never starts.
+    androidResources {
+        noCompress += listOf("task", "tflite", "lite", "bin")
+    }
     lint {
         abortOnError = true
         checkReleaseBuilds = false

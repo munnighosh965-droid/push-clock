@@ -6,11 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.powerclock.alarm.alarmengine.AlarmRingingService
 import com.powerclock.alarm.alarmengine.RingingSession
 import com.powerclock.alarm.alarmengine.RingingStateHolder
+import com.powerclock.alarm.data.prefs.FitnessLevel
 import com.powerclock.alarm.data.prefs.SettingsRepository
 import com.powerclock.alarm.data.prefs.UserSettings
 import com.powerclock.alarm.data.repo.HistoryRepository
 import com.powerclock.alarm.domain.missions.FallbackSelector
 import com.powerclock.alarm.domain.model.MissionConfig
+import com.powerclock.alarm.domain.model.MissionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,15 +55,48 @@ class RingingViewModel @Inject constructor(
     /** Kept after dismissal so the success screen can attach a rating. */
     private var completedEventId: Long = -1L
 
+    /**
+     * Strict workout mode is on and the user has not told us that exercise is
+     * unsafe: the alarm can only be dismissed by finishing a workout.
+     */
+    val workoutRequired: Boolean
+        get() = settings.value.strictWorkoutMode && !settings.value.cannotExercise
+
     fun beginMissions() {
         val alarm = session.value?.alarm ?: return
-        val missions = alarm.missions
+        val missions = enforceWorkout(alarm.missions)
         AlarmRingingService.missionStarted(appContext)
         if (missions.isEmpty()) {
             finishAll()
         } else {
             _run.value = _run.value.copy(phase = RingingPhase.MISSION, missions = missions, index = 0)
         }
+    }
+
+    /**
+     * In strict mode every mission stack ends with a workout. Alarms with no
+     * missions at all get one built from the user's fitness level, so "just
+     * swipe to dismiss" is never an option.
+     */
+    private fun enforceWorkout(configured: List<MissionConfig>): List<MissionConfig> {
+        if (!workoutRequired) return configured
+        if (configured.any { it.type.isWorkout }) return configured
+        return configured + defaultWorkout()
+    }
+
+    private fun defaultWorkout(): MissionConfig {
+        val s = settings.value
+        val type = when (s.fitnessLevel) {
+            FitnessLevel.GENTLE -> MissionType.KNEE_PUSH_UPS
+            FitnessLevel.MODERATE -> MissionType.SQUATS
+            FitnessLevel.ACTIVE -> MissionType.PUSH_UPS
+        }
+        val target = when (s.fitnessLevel) {
+            FitnessLevel.GENTLE -> 3
+            FitnessLevel.MODERATE -> 5
+            FitnessLevel.ACTIVE -> 8
+        }
+        return MissionConfig(type = type, target = target)
     }
 
     fun onMissionCompleted(reps: Int = 0) {

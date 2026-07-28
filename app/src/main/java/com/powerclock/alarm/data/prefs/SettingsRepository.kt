@@ -51,6 +51,12 @@ data class UserSettings(
     val allowVolumeOverride: Boolean = false,
     val autoSilenceMinutes: Int = 15,
     val qrCardId: String = "",
+    /**
+     * When on (default), every alarm ends with a workout: the mission starts
+     * itself, a workout is injected if the alarm has none, and camera trouble
+     * falls back to self-counted reps instead of skipping the exercise.
+     */
+    val strictWorkoutMode: Boolean = true,
 )
 
 @Singleton
@@ -82,6 +88,7 @@ class SettingsRepository @Inject constructor(
         val VOLUME_OVERRIDE = booleanPreferencesKey("allow_volume_override")
         val AUTO_SILENCE = intPreferencesKey("auto_silence_minutes")
         val QR_CARD_ID = stringPreferencesKey("qr_card_id")
+        val STRICT_WORKOUT = booleanPreferencesKey("strict_workout_mode")
     }
 
     val settings: Flow<UserSettings> = context.dataStore.data.map { p ->
@@ -110,6 +117,7 @@ class SettingsRepository @Inject constructor(
             allowVolumeOverride = p[Keys.VOLUME_OVERRIDE] ?: false,
             autoSilenceMinutes = p[Keys.AUTO_SILENCE] ?: 15,
             qrCardId = p[Keys.QR_CARD_ID] ?: "",
+            strictWorkoutMode = p[Keys.STRICT_WORKOUT] ?: true,
         )
     }
 
@@ -142,6 +150,7 @@ class SettingsRepository @Inject constructor(
             p[Keys.VOLUME_OVERRIDE] = next.allowVolumeOverride
             p[Keys.AUTO_SILENCE] = next.autoSilenceMinutes
             p[Keys.QR_CARD_ID] = next.qrCardId
+            p[Keys.STRICT_WORKOUT] = next.strictWorkoutMode
         }
     }
 

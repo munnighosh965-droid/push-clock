@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -74,6 +75,12 @@ fun WorkoutLiveView(
     onCannotRun: (String) -> Unit,
     modifier: Modifier = Modifier,
     onCannotSafelyExercise: (() -> Unit)? = null,
+    /**
+     * Strict mode: the workout must be finished to dismiss the alarm, so
+     * camera or pose-model problems fall back to self-counted reps instead of
+     * handing the mission back to the caller for replacement.
+     */
+    requireWorkout: Boolean = false,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -86,6 +93,8 @@ fun WorkoutLiveView(
     var latestSample by remember { mutableStateOf<PoseSample?>(null) }
     var useFrontCamera by remember { mutableStateOf(true) }
     var done by remember { mutableStateOf(false) }
+    var manualReason by remember { mutableStateOf<String?>(null) }
+    var lastManualRepAt by remember { mutableStateOf(0L) }
 
     val currentOnComplete by rememberUpdatedState(onComplete)
 
@@ -117,6 +126,27 @@ fun WorkoutLiveView(
         }
     }
 
+    val reason = manualReason
+    if (reason != null) {
+        ManualRepCounter(
+            config = config,
+            reps = reps,
+            reason = reason,
+            onRep = {
+                val nowMs = System.currentTimeMillis()
+                // A minimum pace stops the counter being tapped through.
+                if (nowMs - lastManualRepAt >= 1200L) {
+                    lastManualRepAt = nowMs
+                    reps += 1
+                }
+            },
+            onRetryCamera = { manualReason = null },
+            onCannotSafelyExercise = onCannotSafelyExercise.takeIf { !testMode },
+            modifier = modifier,
+        )
+        return
+    }
+
     Box(modifier = modifier) {
         PoseCameraPreview(
             useFrontCamera = useFrontCamera,
@@ -129,7 +159,13 @@ fun WorkoutLiveView(
                 phaseProgress = update.phaseProgress
             },
             onBindFailed = { e ->
-                onCannotRun(e.message ?: "Camera unavailable")
+                val message = e.message ?: "Camera unavailable"
+                if (requireWorkout) manualReason = message else onCannotRun(message)
+            },
+            onPoseUnavailable = { message ->
+                // Camera works but automatic counting does not: keep the
+                // workout and let the user count their own reps.
+                if (requireWorkout) manualReason = message else onCannotRun(message)
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -212,6 +248,72 @@ fun WorkoutLiveView(
                     onClick = onCannotSafelyExercise,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("I cannot safely exercise") }
+            }
+        }
+    }
+}
+
+/**
+ * Self-counted workout used when the camera or the pose model cannot run but
+ * the workout is still required. Honest effort, enforced pace: taps faster
+ * than one every 1.2 s are ignored.
+ */
+@Composable
+private fun ManualRepCounter(
+    config: MissionConfig,
+    reps: Int,
+    reason: String,
+    onRep: () -> Unit,
+    onRetryCamera: () -> Unit,
+    onCannotSafelyExercise: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val view = LocalView.current
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "Camera counting unavailable",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            "$reason — the workout still counts. Do each rep, then tap to log it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "$reps / ${config.target}",
+            style = MaterialTheme.typography.displayMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        LinearProgressIndicator(
+            progress = { (reps.toFloat() / config.target).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onRep()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp),
+        ) { Text("Count rep", style = MaterialTheme.typography.headlineSmall) }
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = onRetryCamera, modifier = Modifier.fillMaxWidth()) {
+            Text("Try the camera again")
+        }
+        if (onCannotSafelyExercise != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onCannotSafelyExercise, modifier = Modifier.fillMaxWidth()) {
+                Text("I cannot safely exercise")
             }
         }
     }

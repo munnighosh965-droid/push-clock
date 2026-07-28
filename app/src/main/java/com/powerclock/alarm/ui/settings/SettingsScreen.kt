@@ -95,6 +95,16 @@ fun SettingsScreen(
                 ToggleRow("Bedtime reminder notification", settings.bedtimeReminderEnabled) { v ->
                     viewModel.update { it.copy(bedtimeReminderEnabled = v) }
                 }
+                ToggleRow(
+                    "Workout required to dismiss alarms",
+                    settings.strictWorkoutMode,
+                ) { v -> viewModel.update { it.copy(strictWorkoutMode = v) } }
+                Text(
+                    "Alarms start their workout automatically, alarms without a mission get one, " +
+                        "and camera trouble switches to self-counted reps instead of skipping.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 ToggleRow("Exercise isn't safe for me right now", settings.cannotExercise) { v ->
                     viewModel.update { it.copy(cannotExercise = v) }
                 }

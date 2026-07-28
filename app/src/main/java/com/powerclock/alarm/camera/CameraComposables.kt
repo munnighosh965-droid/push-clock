@@ -16,6 +16,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.powerclock.alarm.domain.pose.PoseSample
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -47,8 +50,13 @@ fun hasCamera(provider: ProcessCameraProvider, front: Boolean): Boolean = try {
 
 /**
  * Live camera preview feeding frames into the on-device pose detector.
- * [onBindFailed] fires when the camera cannot start (busy, missing, or
- * permission race) so callers can fall back to a non-camera mission.
+ *
+ * The camera is bound **before** the pose model finishes loading, so the user
+ * always sees themselves immediately. [onBindFailed] fires only when the
+ * camera itself cannot start (missing hardware, permission race, or still
+ * busy after several retries). [onPoseUnavailable] fires when the camera works
+ * but automatic rep counting cannot (model load failure) — callers can then
+ * switch to manual counting instead of losing the workout entirely.
  */
 @Composable
 fun PoseCameraPreview(
@@ -56,6 +64,8 @@ fun PoseCameraPreview(
     onSample: (PoseSample) -> Unit,
     onBindFailed: (Throwable) -> Unit,
     modifier: Modifier = Modifier,
+    onPoseUnavailable: (String) -> Unit = {},
+    onCameraReady: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -69,46 +79,53 @@ fun PoseCameraPreview(
         )
     }
 
+    // Bind the camera first. Right after an alarm fires the camera can still
+    // be held by another process for a moment, so binding is retried before
+    // giving up on it.
     LaunchedEffect(useFrontCamera) {
-        // Heavy model load happens off the main thread; the camera preview
-        // binds regardless so the user immediately sees themselves, and
-        // counting starts as soon as the detector is ready.
-        val modelOk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            analyzer.initialize()
-        }
-        if (!modelOk) {
-            onBindFailed(
-                IllegalStateException(
-                    "Pose detector could not start" +
-                        (analyzer.initError?.let { ": $it" } ?: ""),
-                ),
-            )
-            return@LaunchedEffect
-        }
-        try {
-            val provider = cameraProvider(context)
-            provider.unbindAll()
-            val preview = Preview.Builder().build().also {
-                it.surfaceProvider = previewView.surfaceProvider
-            }
-            val analysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .build()
-                .also { it.setAnalyzer(executor, analyzer) }
-            val wantFront = useFrontCamera && hasCamera(provider, front = true)
-            val selector = when {
-                wantFront -> CameraSelector.DEFAULT_FRONT_CAMERA
-                hasCamera(provider, front = false) -> CameraSelector.DEFAULT_BACK_CAMERA
-                hasCamera(provider, front = true) -> CameraSelector.DEFAULT_FRONT_CAMERA
-                else -> {
+        var lastError: Throwable? = IllegalStateException("Camera did not start")
+        var bound = false
+        repeat(4) { attempt ->
+            if (bound) return@repeat
+            try {
+                val provider = cameraProvider(context)
+                val wantFront = useFrontCamera && hasCamera(provider, front = true)
+                val selector = when {
+                    wantFront -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    hasCamera(provider, front = false) -> CameraSelector.DEFAULT_BACK_CAMERA
+                    hasCamera(provider, front = true) -> CameraSelector.DEFAULT_FRONT_CAMERA
+                    else -> null
+                }
+                if (selector == null) {
                     onBindFailed(IllegalStateException("No camera available"))
                     return@LaunchedEffect
                 }
+                provider.unbindAll()
+                val preview = Preview.Builder().build().also {
+                    it.surfaceProvider = previewView.surfaceProvider
+                }
+                val analysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    .build()
+                    .also { it.setAnalyzer(executor, analyzer) }
+                provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+                bound = true
+                onCameraReady()
+            } catch (e: Throwable) {
+                lastError = e
+                delay(400L * (attempt + 1))
             }
-            provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
-        } catch (e: Throwable) {
-            onBindFailed(e)
+        }
+        if (!bound) {
+            onBindFailed(lastError ?: IllegalStateException("Camera did not start"))
+            return@LaunchedEffect
+        }
+        // Heavy model load happens off the main thread while the preview is
+        // already live; counting starts as soon as the detector is ready.
+        val modelOk = withContext(Dispatchers.Default) { analyzer.initialize() }
+        if (!modelOk) {
+            onPoseUnavailable(analyzer.initError ?: "Pose detector could not start")
         }
     }
 
