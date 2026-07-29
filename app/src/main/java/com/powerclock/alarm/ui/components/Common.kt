@@ -167,17 +167,31 @@ fun rememberReducedMotion(userPreference: Boolean): Boolean {
     return userPreference || systemReduced
 }
 
+/** Every clock reading in Power Clock is 12-hour with an AM/PM suffix. */
 object TimeFormat {
-    private val clock = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+    private val clockDigits = DateTimeFormatter.ofPattern("h:mm", Locale.US)
+    private val meridiem = DateTimeFormatter.ofPattern("a", Locale.US)
     private val dateFull = DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.US)
-    private val dateShort = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.US)
+    private val dateShort = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US)
 
-    fun clock(time: ZonedDateTime): String = clock.format(time)
+    fun clock(time: ZonedDateTime): String = "${clockDigits(time)} ${meridiem(time)}"
     fun fullDate(time: ZonedDateTime): String = dateFull.format(time)
     fun nextAlarm(time: ZonedDateTime): String = dateShort.format(time)
 
+    /** Hours and minutes only, for displays that style AM/PM separately. */
+    fun clockDigits(time: ZonedDateTime): String = clockDigits.format(time)
+
+    fun meridiem(time: ZonedDateTime): String = meridiem.format(time)
+
     fun minutesAsClock(minutesOfDay: Int): String =
-        "%02d:%02d".format(minutesOfDay / 60, minutesOfDay % 60)
+        hourMinute(minutesOfDay / 60, minutesOfDay % 60)
+
+    /** Formats a wall-clock hour (0..23) and minute as e.g. "7:05 AM". */
+    fun hourMinute(hour: Int, minute: Int): String {
+        val hour12 = if (hour % 12 == 0) 12 else hour % 12
+        val suffix = if (hour < 12) "AM" else "PM"
+        return "%d:%02d %s".format(hour12, minute, suffix)
+    }
 
     fun countdown(from: ZonedDateTime, to: ZonedDateTime): String {
         val d = Duration.between(from, to)

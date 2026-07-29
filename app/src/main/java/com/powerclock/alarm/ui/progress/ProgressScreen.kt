@@ -244,7 +244,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 
 @Composable
 private fun HistoryRow(event: WakeEvent) {
-    val formatter = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.US)
+    val formatter = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US)
     val time = Instant.ofEpochMilli(event.rangAtMs).atZone(ZoneId.systemDefault())
     PowerCard(Modifier.fillMaxWidth()) {
         Column {

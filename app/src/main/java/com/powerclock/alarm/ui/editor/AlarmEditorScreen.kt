@@ -180,7 +180,7 @@ private fun EditorMainPage(
     val timeState = rememberTimePickerState(
         initialHour = alarm.hour,
         initialMinute = alarm.minute,
-        is24Hour = true,
+        is24Hour = false,
     )
     LaunchedEffect(timeState) {
         snapshotFlow { timeState.hour to timeState.minute }
