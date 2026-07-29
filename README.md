@@ -39,7 +39,7 @@ If the SDK is not auto-detected, create `local.properties` with
 ### Installing
 
 ```bash
-adb install -r deliverables/PowerClock-v1.0.0-debug.apk
+adb install -r deliverables/PowerClock-v1.2.0-debug.apk
 ```
 
 ### Signing the release APK
@@ -64,7 +64,7 @@ apksigner sign --ks powerclock.keystore --out PowerClock-release.apk app-release
 ## Testing
 
 ```bash
-./gradlew test          # 77 JVM unit tests (scheduling, DST, rep counters, stats, queueing...)
+./gradlew test          # 83 JVM unit tests (scheduling, DST, rep counters, stats, queueing...)
 ./gradlew lint          # Android lint (0 errors)
 ./gradlew connectedDebugAndroidTest   # UI tests; requires an emulator or device
 ```

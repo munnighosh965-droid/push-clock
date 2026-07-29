@@ -52,6 +52,15 @@ never stored or uploaded, and there is no face recognition.
 as a PNG, print it or display it somewhere away from bed. Only that exact
 card dismisses the mission.
 
+## The dashboard
+
+The home screen leads with an animated analog clock — a sweeping second
+hand, an elapsed-seconds arc on the rim, and a soft breathing glow — above
+the current time and date. All times in Power Clock are shown in 12-hour
+format with AM/PM. If you enable **Reduce motion** in Settings (or turn
+animations off system-wide), the dial and the rest of the dashboard become
+completely static.
+
 ## When the alarm rings
 
 The full-screen ringing view appears (over the lock screen too). Tap
