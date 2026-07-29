@@ -34,11 +34,22 @@ com.powerclock.alarm
 └── ui/                      Compose Material 3 screens, one ViewModel each
     ├── home/ alarms/ editor/ progress/ settings/ onboarding/
     ├── ringing/ workout/ reliability/ earlyrise/ privacy/ qrcard/ about/
-    ├── components/          PowerCard, ProgressRing, HoldToConfirmButton…
+    ├── components/          PowerCard, ProgressRing, HeroClock, TimeFormat…
     └── theme/               Brand palette, typography, shapes
 ```
 
 \* `domain/` uses only `java.time`, `kotlin.*`, and Kotlin stdlib.
+
+## Design system
+
+`ui/theme/` holds the whole visual language in two files. `Theme.kt` defines
+the obsidian / champagne-gold / platinum palette for both dark and light
+schemes: gold carries the accents, platinum the secondary information, so the
+two never compete. `Type.kt` pairs Sora (display face, used for clock
+readings and titles) with Inter (text face, used for body copy and controls),
+bundled as static weights under `res/font/`. Clock styles enable tabular
+figures so a ticking readout never shifts the characters around it; Sora
+carries no dingbats, so the few symbol badges (✓ ★ ○) are pinned to Inter.
 
 ## Alarm reliability design
 

@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powerclock.alarm.domain.stats.WakeStats
 import com.powerclock.alarm.ui.theme.AlertRed
-import com.powerclock.alarm.ui.theme.ElectricLime
-import com.powerclock.alarm.ui.theme.PowerBlue
+import com.powerclock.alarm.ui.theme.Champagne
+import com.powerclock.alarm.ui.theme.Platinum
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -68,16 +68,16 @@ fun Wordmark(modifier: Modifier = Modifier, big: Boolean = false) {
         Text(
             "POWER",
             style = if (big) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
-            letterSpacing = 2.sp,
+            letterSpacing = 3.sp,
         )
         Text(
             " CLOCK",
             style = if (big) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
-            color = ElectricLime,
-            letterSpacing = 2.sp,
+            fontWeight = FontWeight.Bold,
+            color = Champagne,
+            letterSpacing = 3.sp,
         )
     }
 }
@@ -89,7 +89,7 @@ fun ProgressRing(
     modifier: Modifier = Modifier,
     ringSize: Dp = 180.dp,
     stroke: Dp = 12.dp,
-    color: Color = ElectricLime,
+    color: Color = Champagne,
     track: Color = MaterialTheme.colorScheme.surfaceVariant,
     content: @Composable () -> Unit = {},
 ) {
@@ -127,8 +127,8 @@ fun WeekDots(results: List<WakeStats.DayResult>, modifier: Modifier = Modifier) 
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         results.forEach { r ->
             val (color, letter) = when (r) {
-                WakeStats.DayResult.SUCCESS -> ElectricLime to "✓"
-                WakeStats.DayResult.EMERGENCY -> PowerBlue to "E"
+                WakeStats.DayResult.SUCCESS -> Champagne to "✓"
+                WakeStats.DayResult.EMERGENCY -> Platinum to "E"
                 WakeStats.DayResult.MISSED -> AlertRed to "×"
                 WakeStats.DayResult.NO_ALARM -> MaterialTheme.colorScheme.surfaceVariant to "·"
             }

@@ -30,6 +30,7 @@ import com.powerclock.alarm.ui.components.PowerCard
 import com.powerclock.alarm.ui.components.ProgressRing
 import com.powerclock.alarm.ui.components.SectionTitle
 import com.powerclock.alarm.ui.components.WeekDots
+import com.powerclock.alarm.ui.theme.Inter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -194,6 +195,7 @@ fun ProgressScreen(
                             Text(
                                 if (badge.earned) "★" else "☆",
                                 style = MaterialTheme.typography.headlineSmall,
+                                fontFamily = Inter,
                                 color = if (badge.earned) {
                                     MaterialTheme.colorScheme.primary
                                 } else {

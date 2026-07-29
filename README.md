@@ -11,7 +11,8 @@ QR card placed away from your bed — before it stops.
 - **No ads. No subscriptions. No in-app purchases. No accounts.**
 - **No internet permission at all** — the app is physically unable to upload
   anything. All pose detection runs on-device with MediaPipe.
-- Original code, UI, branding, icons, and eight synthesized alarm tones.
+- Original code, UI, branding, icons, and eight synthesized alarm tones, set
+  in the open-source Sora and Inter typefaces.
 
 ## Requirements
 

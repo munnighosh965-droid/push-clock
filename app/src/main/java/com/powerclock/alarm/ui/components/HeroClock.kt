@@ -66,9 +66,11 @@ fun HeroClock(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
-    val dial = MaterialTheme.colorScheme.onSurfaceVariant
     val hands = MaterialTheme.colorScheme.onBackground
     val hub = MaterialTheme.colorScheme.surface
+    // Dial furniture is a dimmed version of the text colour rather than the
+    // cool secondary text tone, so it stays in key with the warm accent.
+    val dial = hands
 
     // One high-resolution time source, so the three hands can never disagree
     // with each other by a fraction of a second.
@@ -178,7 +180,7 @@ fun HeroClock(
                 val outer = r * 0.89f
                 val inner = if (isHour) r * 0.78f else r * 0.84f
                 drawLine(
-                    color = if (isHour) dial.copy(alpha = 0.85f) else dial.copy(alpha = 0.3f),
+                    color = if (isHour) dial.copy(alpha = 0.6f) else dial.copy(alpha = 0.2f),
                     start = Offset(c.x + cosA * inner, c.y + sinA * inner),
                     end = Offset(c.x + cosA * outer, c.y + sinA * outer),
                     strokeWidth = if (isHour) r * 0.022f else r * 0.01f,

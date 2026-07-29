@@ -42,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.powerclock.alarm.ui.components.PowerCard
+import com.powerclock.alarm.ui.theme.Inter
 
 private data class Check(
     val title: String,
@@ -123,6 +124,7 @@ fun ReliabilityScreen(onBack: () -> Unit) {
                         Text(
                             if (check.ok) "✓" else if (check.critical) "!" else "○",
                             style = MaterialTheme.typography.headlineSmall,
+                            fontFamily = Inter,
                             color = when {
                                 check.ok -> MaterialTheme.colorScheme.primary
                                 check.critical -> MaterialTheme.colorScheme.error

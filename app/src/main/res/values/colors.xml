@@ -1,8 +1,8 @@
 <resources>
-    <color name="midnight">#080B12</color>
-    <color name="deep_surface">#111827</color>
-    <color name="electric_lime">#C7FF45</color>
-    <color name="power_blue">#4DA3FF</color>
-    <color name="warm_white">#F7F9FC</color>
-    <color name="alert_red">#FF5A5F</color>
+    <color name="obsidian">#0A0C10</color>
+    <color name="graphite">#14181F</color>
+    <color name="champagne">#E4C58A</color>
+    <color name="platinum">#C3CBD6</color>
+    <color name="ivory">#F4F1EA</color>
+    <color name="alert_red">#E5544B</color>
 </resources>
