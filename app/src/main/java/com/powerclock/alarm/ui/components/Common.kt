@@ -3,29 +3,18 @@ package com.powerclock.alarm.ui.components
 import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +25,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,7 +32,6 @@ import com.powerclock.alarm.domain.stats.WakeStats
 import com.powerclock.alarm.ui.theme.AlertRed
 import com.powerclock.alarm.ui.theme.ElectricLime
 import com.powerclock.alarm.ui.theme.PowerBlue
-import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -162,71 +149,6 @@ fun WeekDots(results: List<WakeStats.DayResult>, modifier: Modifier = Modifier) 
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
-        }
-    }
-}
-
-/**
- * Deliberate hold-to-confirm button (default 10 s) used for emergency
- * dismissal. Releasing early resets progress.
- */
-@Composable
-fun HoldToConfirmButton(
-    label: String,
-    holdSeconds: Int,
-    onConfirmed: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    var progress by remember { mutableFloatStateOf(0f) }
-
-    LaunchedEffect(pressed) {
-        if (pressed) {
-            val start = System.currentTimeMillis()
-            val totalMs = holdSeconds * 1000L
-            while (progress < 1f) {
-                progress = ((System.currentTimeMillis() - start).toFloat() / totalMs).coerceAtMost(1f)
-                if (progress >= 1f) {
-                    onConfirmed()
-                    break
-                }
-                delay(50)
-            }
-        } else {
-            progress = 0f
-        }
-    }
-
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(
-            onClick = { /* requires press-and-hold */ },
-            interactionSource = interaction,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .sizeIn(minHeight = 56.dp),
-        ) {
-            Text(
-                if (pressed && progress > 0f) {
-                    "Keep holding… ${((1f - progress) * holdSeconds).toInt() + 1}s"
-                } else {
-                    label
-                },
-                textAlign = TextAlign.Center,
-            )
-        }
-        if (pressed && progress > 0f) {
-            androidx.compose.material3.LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                color = AlertRed,
-            )
         }
     }
 }

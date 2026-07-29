@@ -312,7 +312,7 @@ private fun SafetyPage(draft: UserSettings, update: ((UserSettings) -> UserSetti
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Power Clock is a wellness tool, not medical advice. Every alarm always has non-physical missions and a deliberate emergency dismiss — you will never be trapped.",
+            "Power Clock is a wellness tool, not medical advice. Alarms always include a workout mission — unless you tell us exercise isn't safe, in which case non-physical missions are used instead. If a mission ever can't run, it is swapped for a safe fallback so you are never trapped.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -370,12 +370,22 @@ private fun PermissionsPage(viewModel: OnboardingViewModel) {
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> notifGranted = granted }
+    var cameraGranted by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, Manifest.permission.CAMERA,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> cameraGranted = granted }
 
     Column {
         Text("Make alarms unstoppable", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Two permissions matter most for reliable wake-ups. Camera access is asked later, only if you choose a workout mission.",
+            "These permissions matter most for reliable wake-ups and camera-counted workouts.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -408,6 +418,19 @@ private fun PermissionsPage(viewModel: OnboardingViewModel) {
                 } catch (_: Exception) {
                 }
             }) { Text("Allow exact alarms") }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            if (cameraGranted) "✓ Camera enabled" else "Camera — counts your wake-up workout on-device; nothing is stored or uploaded",
+            style = MaterialTheme.typography.titleSmall,
+            color = if (cameraGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+        if (!cameraGranted) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { cameraLauncher.launch(Manifest.permission.CAMERA) }) {
+                Text("Allow camera")
+            }
         }
         Spacer(Modifier.height(16.dp))
         Text(

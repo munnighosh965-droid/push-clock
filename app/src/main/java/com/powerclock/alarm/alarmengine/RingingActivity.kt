@@ -21,8 +21,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Full-screen ringing UI. Shown over the lock screen with the screen turned
- * on; back navigation is disabled so the only exits are mission completion
- * or the deliberate emergency dismiss.
+ * on; back navigation is disabled so the only exit is mission completion.
  */
 @AndroidEntryPoint
 class RingingActivity : ComponentActivity() {

@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -167,6 +168,24 @@ internal fun MissionConfigPage(
         else -> MissionConfig.MAX_TARGET
     }
 
+    val context = LocalContext.current
+    var cameraGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> cameraGranted = granted }
+    // Ask for the camera as soon as a camera mission is being configured, so
+    // the permission is already in place when the alarm actually rings.
+    LaunchedEffect(type) {
+        if (type.needsCamera && !cameraGranted) {
+            cameraLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -186,6 +205,25 @@ internal fun MissionConfigPage(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
+
+        if (type.needsCamera && !cameraGranted) {
+            PowerCard(Modifier.fillMaxWidth()) {
+                Column {
+                    Text("Camera permission needed", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "This mission counts your movements with the camera, on this device only — nothing is stored or uploaded. Without permission the mission is replaced by your fallback at ring time.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { cameraLauncher.launch(Manifest.permission.CAMERA) }) {
+                        Text("Allow camera")
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
 
         if (type.isWorkout) {
             PowerCard(Modifier.fillMaxWidth()) {
@@ -297,15 +335,26 @@ internal fun MissionConfigPage(
 @Composable
 internal fun MissionStackEditor(
     missions: List<MissionConfig>,
+    cannotExercise: Boolean,
     onAdd: () -> Unit,
     onEdit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
 ) {
     Column {
-        if (missions.isEmpty()) {
+        if (!cannotExercise && missions.none { it.type.isWorkout }) {
             Text(
-                "No missions yet — the alarm will have a simple dismiss button. Add a mission to make sure you actually get up.",
+                if (missions.isEmpty()) {
+                    "Every alarm requires a workout: if you don't add one, a 5-squat workout runs when the alarm rings. Add missions to make it your own."
+                } else {
+                    "Every alarm requires a workout: since this stack has none, a 5-squat workout is added automatically when the alarm rings."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else if (cannotExercise && missions.isEmpty()) {
+            Text(
+                "No missions yet — a short math mission will run when the alarm rings so it can't be dismissed with one tap.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

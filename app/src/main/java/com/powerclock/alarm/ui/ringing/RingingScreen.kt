@@ -2,6 +2,8 @@ package com.powerclock.alarm.ui.ringing
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -41,7 +43,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powerclock.alarm.domain.missions.FallbackSelector
 import com.powerclock.alarm.domain.model.MissionType
-import com.powerclock.alarm.ui.components.HoldToConfirmButton
 import com.powerclock.alarm.ui.components.ProgressRing
 import com.powerclock.alarm.ui.components.TimeFormat
 import com.powerclock.alarm.ui.components.rememberReducedMotion
@@ -87,17 +88,14 @@ fun RingingRoot(
             RingingFace(
                 label = s.alarm.label,
                 queuedCount = s.queuedCount,
-                hasMissions = s.alarm.missions.isNotEmpty(),
                 reduceMotion = rememberReducedMotion(settings.reduceMotion),
                 onStart = viewModel::beginMissions,
-                onEmergency = viewModel::emergencyDismiss,
             )
         }
 
         RingingPhase.MISSION -> MissionHost(viewModel)
 
         RingingPhase.SUCCESS -> SuccessScreen(
-            emergency = run.emergencyUsed,
             totalReps = run.totalReps,
             name = settings.name,
             reduceMotion = rememberReducedMotion(settings.reduceMotion),
@@ -111,12 +109,9 @@ fun RingingRoot(
 private fun RingingFace(
     label: String,
     queuedCount: Int,
-    hasMissions: Boolean,
     reduceMotion: Boolean,
     onStart: () -> Unit,
-    onEmergency: () -> Unit,
 ) {
-    var confirmEmergency by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -191,39 +186,19 @@ private fun RingingFace(
                     .sizeIn(minHeight = 64.dp),
             ) {
                 Text(
-                    if (hasMissions) "Start mission" else "I'm up — dismiss",
+                    "Start wake-up mission",
                     style = MaterialTheme.typography.titleLarge,
                 )
             }
             Spacer(Modifier.height(12.dp))
-            HoldToConfirmButton(
-                label = "Emergency dismiss (hold 10s)",
-                holdSeconds = 10,
-                onConfirmed = { confirmEmergency = true },
+            Text(
+                "The alarm stops once your mission is complete.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-    }
-
-    if (confirmEmergency) {
-        AlertDialog(
-            onDismissRequest = { confirmEmergency = false },
-            title = { Text("Emergency dismiss?") },
-            text = {
-                Text(
-                    "This skips your mission and is recorded in your history. Use it when you can't safely complete the mission — no judgement.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmEmergency = false
-                    onEmergency()
-                }) { Text("Dismiss alarm") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmEmergency = false }) { Text("Back to mission") }
-            },
-        )
     }
 }
 
@@ -233,18 +208,32 @@ private fun MissionHost(viewModel: RingingViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val mission = run.current ?: return
-    var confirmEmergency by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableStateOf(false) }
 
-    // Camera-dependent missions are replaced automatically when permission
-    // is missing; the alarm must never be impossible to dismiss.
+    var cameraGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        cameraGranted = granted
+        if (!granted) {
+            // Denied: swap in the fallback so the alarm stays dismissable.
+            viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
+        }
+    }
+
+    // Camera permission is requested right here, at ring time, instead of
+    // silently replacing the workout with a fallback mission.
     LaunchedEffect(mission) {
         if (mission.type.needsCamera) {
-            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
-            } else if (mission.type == MissionType.QR_SCAN && settings.qrCardId.isBlank()) {
+            if (mission.type == MissionType.QR_SCAN && settings.qrCardId.isBlank()) {
                 viewModel.replaceCurrentMission(FallbackSelector.FailureReason.SENSOR_UNAVAILABLE)
+            } else if (!cameraGranted) {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
         }
     }
@@ -261,22 +250,31 @@ private fun MissionHost(viewModel: RingingViewModel) {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            OutlinedButton(onClick = { confirmEmergency = true }) { Text("Help") }
+            OutlinedButton(onClick = { helpOpen = true }) { Text("Help") }
         }
 
         val content: @Composable () -> Unit = {
-            when (mission.type) {
-                MissionType.MATH -> MathMissionScreen(mission) { viewModel.onMissionCompleted() }
-                MissionType.MEMORY -> MemoryMissionScreen(mission) { viewModel.onMissionCompleted() }
-                MissionType.TYPING -> TypingMissionScreen(mission) { viewModel.onMissionCompleted() }
-                MissionType.SHAKE -> ShakeMissionScreen(
+            when {
+                mission.type.needsCamera && !cameraGranted -> CameraPermissionWait(
+                    onAllow = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
+                    onFallback = {
+                        viewModel.replaceCurrentMission(FallbackSelector.FailureReason.CAMERA_UNAVAILABLE)
+                    },
+                )
+                mission.type == MissionType.MATH ->
+                    MathMissionScreen(mission) { viewModel.onMissionCompleted() }
+                mission.type == MissionType.MEMORY ->
+                    MemoryMissionScreen(mission) { viewModel.onMissionCompleted() }
+                mission.type == MissionType.TYPING ->
+                    TypingMissionScreen(mission) { viewModel.onMissionCompleted() }
+                mission.type == MissionType.SHAKE -> ShakeMissionScreen(
                     config = mission,
                     onComplete = { viewModel.onMissionCompleted() },
                     onSensorUnavailable = {
                         viewModel.replaceCurrentMission(FallbackSelector.FailureReason.SENSOR_UNAVAILABLE)
                     },
                 )
-                MissionType.QR_SCAN -> QrMissionScreen(
+                mission.type == MissionType.QR_SCAN -> QrMissionScreen(
                     expectedContent = settings.qrCardId,
                     onComplete = { viewModel.onMissionCompleted() },
                     onCameraFailed = { reason -> viewModel.replaceCurrentMission(reason) },
@@ -297,43 +295,69 @@ private fun MissionHost(viewModel: RingingViewModel) {
         androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { content() }
     }
 
-    if (confirmEmergency) {
+    if (helpOpen) {
         AlertDialog(
-            onDismissRequest = { confirmEmergency = false },
-            title = { Text("Need a way out?") },
+            onDismissRequest = { helpOpen = false },
+            title = { Text("Mission not working?") },
             text = {
                 Column {
-                    Text("If this mission isn't working, you have safe options:")
+                    Text(
+                        "The alarm can only be dismissed by completing a mission. " +
+                            "If this one can't run right now, switch to a safe non-camera mission:",
+                    )
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
-                            confirmEmergency = false
+                            helpOpen = false
                             viewModel.cannotSafelyExercise()
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("I cannot safely exercise — switch mission") }
-                    Spacer(Modifier.height(8.dp))
-                    HoldToConfirmButton(
-                        label = "Emergency dismiss (hold 10s)",
-                        holdSeconds = 10,
-                        onConfirmed = {
-                            confirmEmergency = false
-                            viewModel.emergencyDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { confirmEmergency = false }) { Text("Back to mission") }
+                TextButton(onClick = { helpOpen = false }) { Text("Back to mission") }
             },
         )
     }
 }
 
+/** Shown while the ring-time camera permission dialog is on screen. */
+@Composable
+private fun CameraPermissionWait(
+    onAllow: () -> Unit,
+    onFallback: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "Camera permission needed",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "The camera only counts your movements on this device — nothing is recorded or uploaded.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onAllow, modifier = Modifier.fillMaxWidth()) { Text("Allow camera") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onFallback, modifier = Modifier.fillMaxWidth()) {
+            Text("Use a non-camera mission instead")
+        }
+    }
+}
+
 @Composable
 private fun SuccessScreen(
-    emergency: Boolean,
     totalReps: Int,
     name: String,
     reduceMotion: Boolean,
@@ -369,14 +393,13 @@ private fun SuccessScreen(
         }
         Spacer(Modifier.height(24.dp))
         Text(
-            if (emergency) "You're awake. That's the win." else "Mission complete${if (name.isBlank()) "" else ", $name"}!",
+            "Mission complete${if (name.isBlank()) "" else ", $name"}!",
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             when {
-                emergency -> "Emergency dismiss was recorded. Small steps still count."
                 totalReps > 0 -> "$totalReps reps before most people opened their eyes. Ready to power up?"
                 else -> "Alarm conquered. Ready to power up?"
             },
