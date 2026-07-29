@@ -52,7 +52,8 @@ Linux CI environment):
 | Camera denied → automatic non-camera fallback | NOT RUN (needs device) |
 | QR card scan dismisses only the matching card | NOT RUN (needs device) |
 | Shake mission counts firm shakes | NOT RUN (needs device) |
-| Emergency dismiss: 10-s hold + confirm + history entry | NOT RUN (needs device) |
+| Alarm without missions still requires the default workout | PASS (automated: MissionEnforcerTest) |
+| Camera permission requested at ring time before fallback | NOT RUN (needs device) |
 
 ## Sounds & custom music
 

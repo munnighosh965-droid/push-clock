@@ -80,8 +80,8 @@ fun AboutScreen(onBack: () -> Unit) {
         PowerCard(Modifier.fillMaxWidth()) {
             Text(
                 "Wellness note: Power Clock encourages gentle morning movement but is not medical advice. " +
-                    "Listen to your body, keep targets comfortable, and use the non-physical missions or " +
-                    "emergency dismiss whenever exercise isn't right for you.",
+                    "Listen to your body, keep targets comfortable, and switch to the non-physical missions " +
+                    "whenever exercise isn't right for you.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

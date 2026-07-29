@@ -79,11 +79,13 @@ com.powerclock.alarm
 
 An alarm stores its mission stack as a compact encoded string
 (`PUSH_UPS:5:1:NORMAL|MATH:2:1:NORMAL`). During ringing, `RingingViewModel`
-walks the stack. If a mission cannot run (camera denied/busy, sensor
-missing, model unavailable) `FallbackSelector` swaps *only that mission* for
-the configured fallback, guaranteeing the fallback never needs the failed
-capability. Emergency dismissal (10-second hold + confirmation) is always
-available and logged.
+walks the stack. `MissionEnforcer` guarantees the stack always contains a
+workout mission (a default 5-squat workout is appended when none is
+configured; users who marked exercise as unsafe get a brain mission
+instead), so an alarm can never be dismissed with a single tap. If a
+mission cannot run (camera denied/busy, sensor missing, model unavailable)
+`FallbackSelector` swaps *only that mission* for the configured fallback,
+guaranteeing the fallback never needs the failed capability.
 
 ### Pose pipeline
 

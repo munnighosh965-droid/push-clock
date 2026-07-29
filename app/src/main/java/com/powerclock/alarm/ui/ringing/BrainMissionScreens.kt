@@ -35,7 +35,7 @@ import com.powerclock.alarm.domain.missions.MathProblemGenerator
 import com.powerclock.alarm.domain.missions.MemorySequenceGenerator
 import com.powerclock.alarm.domain.missions.PhraseBank
 import com.powerclock.alarm.domain.model.MissionConfig
-import com.powerclock.alarm.ui.theme.Glacier
+import com.powerclock.alarm.ui.theme.ElectricLime
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
@@ -161,7 +161,7 @@ fun MemoryMissionScreen(config: MissionConfig, onComplete: () -> Unit) {
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(16.dp))
                             .background(
-                                if (lit) Glacier else MaterialTheme.colorScheme.surfaceVariant,
+                                if (lit) ElectricLime else MaterialTheme.colorScheme.surfaceVariant,
                             )
                             .clickable(enabled = showingDone && !failed) {
                                 if (sequence[progress] == idx) {

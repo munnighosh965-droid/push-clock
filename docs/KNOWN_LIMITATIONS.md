@@ -29,8 +29,10 @@ An honest list of what this version does not (or cannot) do.
 
 ## Functional limitations
 
-- **No snooze button by design** — missions replace snoozing. (Emergency
-  dismiss covers genuine emergencies.)
+- **No snooze and no emergency dismiss by design** — completing a mission
+  (a workout by default) is the only way to stop an alarm. The "I cannot
+  safely exercise" switch and automatic fallbacks keep alarms dismissible
+  when a capability fails.
 - **Step-count mission is not implemented.** Reliable step detection would
   require the `ACTIVITY_RECOGNITION` permission and hardware-dependent
   sensors; it was deliberately left out rather than shipped half-working.

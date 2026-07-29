@@ -239,6 +239,7 @@ private fun EditorMainPage(
         SectionTitle("Wake-up missions")
         MissionStackEditor(
             missions = state.missions,
+            cannotExercise = state.cannotExercise,
             onAdd = onAddMission,
             onEdit = onEditMission,
             onRemove = viewModel::removeMission,

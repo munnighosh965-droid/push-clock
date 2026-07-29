@@ -64,7 +64,7 @@ apksigner sign --ks powerclock.keystore --out PowerClock-release.apk app-release
 ## Testing
 
 ```bash
-./gradlew test          # 71 JVM unit tests (scheduling, DST, rep counters, stats, queueing...)
+./gradlew test          # 77 JVM unit tests (scheduling, DST, rep counters, stats, queueing...)
 ./gradlew lint          # Android lint (0 errors)
 ./gradlew connectedDebugAndroidTest   # UI tests; requires an emulator or device
 ```

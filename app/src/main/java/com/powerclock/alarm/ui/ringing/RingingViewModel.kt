@@ -10,6 +10,7 @@ import com.powerclock.alarm.data.prefs.SettingsRepository
 import com.powerclock.alarm.data.prefs.UserSettings
 import com.powerclock.alarm.data.repo.HistoryRepository
 import com.powerclock.alarm.domain.missions.FallbackSelector
+import com.powerclock.alarm.domain.missions.MissionEnforcer
 import com.powerclock.alarm.domain.model.MissionConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,7 +30,6 @@ data class MissionRunState(
     val index: Int = 0,
     val totalReps: Int = 0,
     val summary: List<String> = emptyList(),
-    val emergencyUsed: Boolean = false,
 ) {
     val current: MissionConfig? get() = missions.getOrNull(index)
 }
@@ -55,13 +55,11 @@ class RingingViewModel @Inject constructor(
 
     fun beginMissions() {
         val alarm = session.value?.alarm ?: return
-        val missions = alarm.missions
         AlarmRingingService.missionStarted(appContext)
-        if (missions.isEmpty()) {
-            finishAll()
-        } else {
-            _run.value = _run.value.copy(phase = RingingPhase.MISSION, missions = missions, index = 0)
-        }
+        // Waking up must be earned: alarms without a workout mission get the
+        // default workout added, so a bare "dismiss" button never exists.
+        val missions = MissionEnforcer.enforce(alarm.missions, settings.value.cannotExercise)
+        _run.value = _run.value.copy(phase = RingingPhase.MISSION, missions = missions, index = 0)
     }
 
     fun onMissionCompleted(reps: Int = 0) {
@@ -103,18 +101,6 @@ class RingingViewModel @Inject constructor(
     /** The user tapped "I cannot safely exercise": swap in a brain mission. */
     fun cannotSafelyExercise() {
         replaceCurrentMission(FallbackSelector.FailureReason.POSE_MODEL_UNAVAILABLE)
-    }
-
-    fun emergencyDismiss() {
-        val s = session.value ?: return
-        completedEventId = s.wakeEventId
-        _run.value = _run.value.copy(phase = RingingPhase.SUCCESS, emergencyUsed = true)
-        AlarmRingingService.dismiss(
-            appContext,
-            emergency = true,
-            totalReps = _run.value.totalReps,
-            summary = (_run.value.summary + "EMERGENCY").joinToString("|"),
-        )
     }
 
     private fun finishAll() {

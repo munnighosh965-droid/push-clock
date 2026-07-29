@@ -55,13 +55,16 @@ card dismisses the mission.
 ## When the alarm rings
 
 The full-screen ringing view appears (over the lock screen too). Tap
-**Start mission** and complete your stack. If a camera or sensor fails, only
+**Start wake-up mission** and complete your stack. Completing a workout is
+compulsory: if your alarm has no workout mission configured, a default
+5-squat workout is added automatically (users who marked exercise as unsafe
+in Settings get a brain mission instead). If a camera or sensor fails, only
 the affected mission is swapped for your fallback — an alarm can never
 become impossible to dismiss.
 
+- If camera permission was never granted, Power Clock asks for it right on
+  the ringing screen before falling back to a non-camera mission.
 - **I cannot safely exercise** switches a workout mission to a brain mission.
-- **Emergency dismiss** requires a deliberate 10-second press-and-hold plus a
-  confirmation, and is recorded in your history. No punishment, no guilt.
 - If nothing is answered, the alarm silences itself after the auto-silence
   timeout (5–30 min, configurable) and is logged as *missed*.
 
