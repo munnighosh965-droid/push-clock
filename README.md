@@ -40,7 +40,7 @@ If the SDK is not auto-detected, create `local.properties` with
 ### Installing
 
 ```bash
-adb install -r deliverables/PowerClock-v1.3.0-debug.apk
+adb install -r deliverables/PowerClock-v1.4.0-debug.apk
 ```
 
 ### Signing the release APK
