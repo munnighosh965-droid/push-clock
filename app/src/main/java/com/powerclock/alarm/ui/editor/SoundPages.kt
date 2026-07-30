@@ -282,12 +282,20 @@ internal fun CustomMusicPage(
                         ) { Text("Remove") }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = viewModel::copyTrackForReliability,
-                        enabled = !state.copyingTrack,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (state.copyingTrack) "Copying…" else "Copy into Power Clock for reliability")
+                    if (viewModel.customTrackIsLocalCopy) {
+                        Text(
+                            "Saved inside Power Clock — this alarm plays even if the original file is moved or deleted.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Button(
+                            onClick = viewModel::copyTrackForReliability,
+                            enabled = !state.copyingTrack,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (state.copyingTrack) "Copying…" else "Copy into Power Clock for reliability")
+                        }
                     }
                     state.copyResult?.let {
                         Spacer(Modifier.height(4.dp))

@@ -60,6 +60,16 @@ class CustomAudioStore @Inject constructor(
         }
     }
 
+    /**
+     * True when [uri] already points at our own private copy. Re-copying one
+     * of these would delete the source before reading it, so every copy path
+     * checks this first.
+     */
+    fun isPrivateCopy(uri: Uri): Boolean =
+        com.powerclock.alarm.domain.audio.AudioUriPolicy.isPrivateCopy(
+            uri.scheme, uri.path, privateDir.absolutePath,
+        )
+
     /** Only content:// (SAF) and our own private file:// copies are accepted. */
     fun isValidScheme(uri: Uri): Boolean =
         com.powerclock.alarm.domain.audio.AudioUriPolicy.isAllowed(
@@ -110,6 +120,8 @@ class CustomAudioStore @Inject constructor(
      */
     suspend fun copyIntoPrivateStorage(uri: Uri): Uri? = withContext(Dispatchers.IO) {
         if (!isValidScheme(uri)) return@withContext null
+        // Already ours: copying would clear the directory holding the source.
+        if (isPrivateCopy(uri)) return@withContext uri
         try {
             val size = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
                 ?: -1L
