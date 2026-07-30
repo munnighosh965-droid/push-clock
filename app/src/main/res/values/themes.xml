@@ -7,7 +7,8 @@
 
     <style name="Theme.PowerClock.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/obsidian</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_animated</item>
+        <item name="windowSplashScreenAnimationDuration">700</item>
         <item name="postSplashScreenTheme">@style/Theme.PowerClock</item>
     </style>
 

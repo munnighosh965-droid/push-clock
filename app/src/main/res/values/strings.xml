@@ -19,4 +19,6 @@
     <string name="widget_clock_description">Power Clock analog clock showing the current time</string>
     <string name="widget_no_alarm">No alarm scheduled</string>
     <string name="widget_next_alarm">Next: %1$s</string>
+    <string name="widget_icon_label">Power Clock icon</string>
+    <string name="widget_icon_description">An icon-sized Power Clock dial that keeps real time. Place it among your app icons.</string>
 </resources>

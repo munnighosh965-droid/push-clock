@@ -51,9 +51,19 @@ line, pushed from `AlarmScheduler` whenever an alarm is armed or cancelled.
 `layout-v31/` adds the sweeping second hand that `AnalogClock` only gained in
 Android 12.
 
-A live *launcher icon* is deliberately not attempted: Android reserves
-time-telling app icons for the preinstalled clock app, and the alternatives
-(swapping activity-aliases on a timer) churn the launcher and are unsafe.
+A second provider, `PowerClockIconWidgetProvider`, publishes a one-cell
+version holding only the dial, so it can sit among the app icons and read as
+a Power Clock icon that keeps real time.
+
+A live *launcher icon* is not attainable and is deliberately not attempted.
+Launcher3 and its derivatives read the dynamic-clock metadata
+(`LEVEL_PER_TICK_ICON_ROUND` and its layer-index keys) only after looking the
+package up by name — the AOSP and Lawnchair implementations both hardcode
+`com.google.android.deskclock` — so a third-party app can never qualify. The
+only other route, swapping activity-aliases on a timer, churns the launcher
+and is unsafe at clock frequencies. The icon-sized widget covers the case
+instead, and the launch animation (`ic_splash_animated`) sweeps the icon's
+hands into place through the splash screen.
 
 ## Design system
 

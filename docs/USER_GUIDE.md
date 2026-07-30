@@ -52,6 +52,24 @@ never stored or uploaded, and there is no face recognition.
 as a PNG, print it or display it somewhere away from bed. Only that exact
 card dismisses the mission.
 
+## Choosing an alarm sound
+
+Open an alarm and use the **Sound** card:
+
+- **Sounds** — the eight original Power Clock tones, plus **Sounds on this
+  device**, which opens Android's own picker so you can use any alarm,
+  ringtone or notification sound already on your phone.
+- **My music** — pick any audio file through Android's document picker. Power
+  Clock never asks for broad storage access and never uploads anything. You
+  can set the playback start position and, recommended, tap **Copy into Power
+  Clock for reliability** so the alarm keeps working if the original file is
+  moved or deleted.
+
+If a chosen sound is ever unreadable at ring time, the bundled fallback tone
+plays instead — an alarm is never silent. If Android refuses to let Power
+Clock read a device sound (some ROMs restrict user-added ringtones), the app
+says so when you pick it rather than failing at 6 a.m.
+
 ## The home-screen widget
 
 Long-press your home screen, choose **Widgets**, and drag the **Power Clock**
@@ -65,9 +83,17 @@ costs nothing to keep ticking. On Android 12 and newer it also has a sweeping
 second hand; on older versions it updates once a minute, which is all the
 platform's clock view supports there.
 
-Android does not let any third-party app animate its own launcher icon — only
-the preinstalled system clock can do that — so the widget is how Power Clock
-puts a live, time-telling dial on your home screen.
+There are two widgets:
+
+- **Power Clock** — the full card above: dial, digital time, next alarm.
+- **Power Clock icon** — a one-cell dial with no card, sized to sit *among
+  your app icons*. It looks like the app icon, except the hands really move.
+
+Android does not let any third-party app animate its own launcher icon — the
+launcher looks up the preinstalled clock app by package name and ignores
+everyone else — so the icon-sized widget is as close as Power Clock can get.
+The app icon itself is a real analog clock face, and it animates its hands
+into place every time you launch the app.
 
 ## The dashboard
 

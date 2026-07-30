@@ -54,6 +54,9 @@ Linux CI environment):
 | Shake mission counts firm shakes | NOT RUN (needs device) |
 | Alarm without missions still requires the default workout | PASS (automated: MissionEnforcerTest) |
 | Widget dial keeps time and next-alarm line updates on change | NOT RUN (needs device) |
+| Icon-sized widget ticks in the app grid | NOT RUN (needs device) |
+| Device ringtone picker selects and plays a system alarm sound | NOT RUN (needs device) |
+| Unreadable device sound is rejected at pick time, not at ring time | NOT RUN (needs device) |
 | Camera permission requested at ring time before fallback | NOT RUN (needs device) |
 
 ## Sounds & custom music

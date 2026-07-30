@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 added AnalogClock's second hand, so the icon widget sweeps. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/icon_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <AnalogClock
+        android:id="@+id/icon_widget_clock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:contentDescription="@string/widget_clock_description"
+        android:dial="@drawable/widget_clock_dial"
+        android:hand_hour="@drawable/widget_hand_hour"
+        android:hand_minute="@drawable/widget_hand_minute"
+        android:hand_second="@drawable/widget_hand_second" />
+</FrameLayout>
