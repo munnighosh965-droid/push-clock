@@ -199,6 +199,41 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * A sound chosen from the device's own ringtone/alarm collection. These
+     * carry no media metadata, so the title comes from [android.media.Ringtone],
+     * and readability is what decides whether we accept the pick.
+     */
+    fun onDeviceSoundPicked(uri: Uri) {
+        viewModelScope.launch {
+            customAudioStore.persistPermission(uri)
+            if (!customAudioStore.isPlayable(uri)) {
+                _state.value = _state.value.copy(
+                    copyResult = "Android would not let Power Clock read that sound. " +
+                        "Pick a different one, or add the file through My music instead.",
+                )
+                return@launch
+            }
+            val title = customAudioStore.ringtoneTitle(uri)
+                ?: customAudioStore.readMetadata(uri)?.title
+                ?: "Device sound"
+            update {
+                it.copy(
+                    soundId = SoundCatalog.CUSTOM_ID,
+                    customSoundUri = uri.toString(),
+                    customSoundTitle = title,
+                    customSoundStartMs = 0L,
+                )
+            }
+            _state.value = _state.value.copy(copyResult = null)
+            refreshCustomTrack()
+        }
+    }
+
+    /** URI of the currently selected custom sound, for the picker's initial state. */
+    val currentCustomSoundUri: Uri?
+        get() = _state.value.alarm.customSoundUri?.let(Uri::parse)
+
     fun removeCustomTrack() {
         update {
             it.copy(

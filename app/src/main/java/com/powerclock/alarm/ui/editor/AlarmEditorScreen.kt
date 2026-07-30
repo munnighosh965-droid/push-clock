@@ -283,7 +283,7 @@ private fun EditorMainPage(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onOpenSounds, modifier = Modifier.weight(1f)) {
-                        Text("Sound library")
+                        Text("Sounds")
                     }
                     OutlinedButton(onClick = onOpenCustomMusic, modifier = Modifier.weight(1f)) {
                         Text("My music")

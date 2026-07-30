@@ -1,5 +1,10 @@
 package com.powerclock.alarm.ui.editor
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -36,6 +41,42 @@ import androidx.compose.ui.unit.dp
 import com.powerclock.alarm.domain.audio.SoundCatalog
 import com.powerclock.alarm.ui.components.PowerCard
 
+/**
+ * Launcher for Android's own ringtone picker, so any alarm sound already on
+ * the phone can be used. Returns through [EditorViewModel.onDeviceSoundPicked].
+ */
+@Composable
+private fun rememberDeviceSoundPicker(
+    viewModel: EditorViewModel,
+    title: String,
+): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data
+                ?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if (uri != null) viewModel.onDeviceSoundPicked(uri)
+        }
+    }
+    val existing = viewModel.currentCustomSoundUri
+    return {
+        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, title)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existing)
+        }
+        try {
+            launcher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            // A handful of stripped-down ROMs ship no picker; the bundled
+            // tones and My music still cover every alarm.
+        }
+    }
+}
+
 @Composable
 internal fun SoundLibraryPage(
     viewModel: EditorViewModel,
@@ -45,6 +86,7 @@ internal fun SoundLibraryPage(
     DisposableEffect(Unit) {
         onDispose { viewModel.stopPreview() }
     }
+    val pickDeviceSound = rememberDeviceSoundPicker(viewModel, "Choose an alarm sound")
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -63,6 +105,45 @@ internal fun SoundLibraryPage(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Spacer(Modifier.height(12.dp))
+
+        val deviceSoundSelected = state.alarm.soundId == SoundCatalog.CUSTOM_ID
+        PowerCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clickable(onClickLabel = "Choose a sound from this device") { pickDeviceSound() },
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sounds on this device", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (deviceSoundSelected && state.alarm.customSoundTitle != null) {
+                            state.alarm.customSoundTitle!!
+                        } else {
+                            "Pick any alarm, ringtone or notification sound already on your phone"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (deviceSoundSelected) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+        state.copyResult?.takeIf { deviceSoundSelected || state.alarm.customSoundUri == null }?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
         Spacer(Modifier.height(12.dp))
 
         SoundCatalog.sounds.forEach { sound ->
@@ -116,6 +197,7 @@ internal fun CustomMusicPage(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::onCustomTrackPicked) }
+    val pickDeviceSound = rememberDeviceSoundPicker(viewModel, "Choose an alarm sound")
 
     DisposableEffect(Unit) {
         onDispose { viewModel.stopPreview() }
@@ -226,6 +308,10 @@ internal fun CustomMusicPage(
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(onClick = pickDeviceSound, modifier = Modifier.fillMaxWidth()) {
+            Text("Or pick a sound already on this device")
         }
         Spacer(Modifier.height(12.dp))
         Text(
