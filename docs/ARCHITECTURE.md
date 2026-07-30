@@ -76,6 +76,18 @@ bundled as static weights under `res/font/`. Clock styles enable tabular
 figures so a ticking readout never shifts the characters around it; Sora
 carries no dingbats, so the few symbol badges (✓ ★ ○) are pinned to Inter.
 
+## Reaching the user when an alarm fires
+
+The ringing service opens `RingingActivity` directly as its primary path, and
+the ringing notification carries the same intent as a full-screen intent for
+backup. The direct start is what makes the alarm reliable: since Android 14
+the full-screen intent needs a separate user grant, and without it the system
+downgrades the alarm to a heads-up notification. Alarms armed with
+`setAlarmClock()` come with a temporary background-activity-start allowance,
+which is what permits the direct launch. Both the onboarding permissions page
+and the Reliability Check surface `canUseFullScreenIntent()` so the grant can
+be fixed before an alarm depends on it.
+
 ## Alarm reliability design
 
 1. **Scheduling** — every enabled alarm is armed individually with

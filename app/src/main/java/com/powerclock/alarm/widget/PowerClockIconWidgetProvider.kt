@@ -3,6 +3,7 @@ package com.powerclock.alarm.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
@@ -40,7 +41,28 @@ class PowerClockIconWidgetProvider : AppWidgetProvider() {
         appWidgetIds.forEach { id -> appWidgetManager.updateAppWidget(id, views) }
     }
 
-    private companion object {
-        const val OPEN_APP_REQUEST = 90_002
+    companion object {
+        private const val OPEN_APP_REQUEST = 90_002
+
+        /**
+         * Asks the launcher to drop the live clock straight onto the home
+         * screen, so it does not have to be hunted for in the widget picker.
+         * Returns false when the launcher offers no pinning support, in which
+         * case the widget picker is the only route.
+         */
+        fun requestPin(context: Context): Boolean = try {
+            val manager = AppWidgetManager.getInstance(context)
+            if (manager != null && manager.isRequestPinAppWidgetSupported) {
+                manager.requestPinAppWidget(
+                    ComponentName(context, PowerClockIconWidgetProvider::class.java),
+                    null,
+                    null,
+                )
+            } else {
+                false
+            }
+        } catch (_: Throwable) {
+            false
+        }
     }
 }

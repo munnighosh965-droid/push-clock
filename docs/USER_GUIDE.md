@@ -60,10 +60,13 @@ Open an alarm and use the **Sound** card:
   device**, which opens Android's own picker so you can use any alarm,
   ringtone or notification sound already on your phone.
 - **My music** — pick any audio file through Android's document picker. Power
-  Clock never asks for broad storage access and never uploads anything. You
-  can set the playback start position and, recommended, tap **Copy into Power
-  Clock for reliability** so the alarm keeps working if the original file is
-  moved or deleted.
+  Clock never asks for broad storage access and never uploads anything, and
+  you can set the playback start position.
+
+Music you pick is **copied into Power Clock automatically**, so the alarm
+keeps playing your track even if the original file is later moved, deleted,
+or has its permission withdrawn. If there is not enough free space to copy
+it, the app says so and plays the file where it lies.
 
 If a chosen sound is ever unreadable at ring time, the bundled fallback tone
 plays instead — an alarm is never silent. If Android refuses to let Power
@@ -88,6 +91,8 @@ There are two widgets:
 - **Power Clock** — the full card above: dial, digital time, next alarm.
 - **Power Clock icon** — a one-cell dial with no card, sized to sit *among
   your app icons*. It looks like the app icon, except the hands really move.
+  The quickest way to add it is **Settings → Home screen → Add the live clock
+  icon**, which asks your launcher to place it for you.
 
 Android does not let any third-party app animate its own launcher icon — the
 launcher looks up the preinstalled clock app by package name and ignores
@@ -105,6 +110,15 @@ animations off system-wide), the dial and the rest of the dashboard become
 completely static.
 
 ## When the alarm rings
+
+The full-screen ringing view opens by itself, over the lock screen, rather
+than arriving as a notification you have to tap.
+
+On **Android 14 and newer this needs a permission** — "Full-screen alarm
+view" in the Reliability Check, also offered during onboarding. Without it
+Android silently downgrades alarms to a heads-up notification in the status
+bar. Power Clock also opens the screen directly when the alarm fires, so the
+notification is only a backup.
 
 The full-screen ringing view appears (over the lock screen too). Tap
 **Start wake-up mission** and complete your stack. Completing a workout is
