@@ -10,6 +10,7 @@ import com.powerclock.alarm.data.prefs.SettingsRepository
 import com.powerclock.alarm.data.repo.AlarmRepository
 import com.powerclock.alarm.domain.model.Alarm
 import com.powerclock.alarm.domain.scheduling.NextOccurrenceCalculator
+import com.powerclock.alarm.widget.PowerClockWidgetProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -67,11 +68,13 @@ class AlarmScheduler @Inject constructor(
             // Best effort without the exact-alarm special access.
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMs, operation)
         }
+        PowerClockWidgetProvider.requestUpdate(context)
         return trigger
     }
 
     fun cancel(alarmId: Long) {
         alarmManager.cancel(ringPendingIntent(alarmId))
+        PowerClockWidgetProvider.requestUpdate(context)
     }
 
     /**

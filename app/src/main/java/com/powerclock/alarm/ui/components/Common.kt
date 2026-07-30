@@ -61,10 +61,20 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** The in-app POWER CLOCK wordmark. */
+/** The in-app POWER CLOCK wordmark, led by the live logo clock. */
 @Composable
-fun Wordmark(modifier: Modifier = Modifier, big: Boolean = false) {
+fun Wordmark(
+    modifier: Modifier = Modifier,
+    big: Boolean = false,
+    reduceMotion: Boolean = false,
+) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        LogoMark(
+            diameter = if (big) 40.dp else 28.dp,
+            showSeconds = big,
+            reduceMotion = reduceMotion,
+            modifier = Modifier.padding(end = if (big) 12.dp else 8.dp),
+        )
         Text(
             "POWER",
             style = if (big) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,

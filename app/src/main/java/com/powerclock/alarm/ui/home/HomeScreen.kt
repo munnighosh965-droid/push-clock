@@ -135,7 +135,7 @@ fun HomeScreen(
             .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(16.dp))
-        RevealOnAppear(reduceMotion = reduceMotion) { Wordmark() }
+        RevealOnAppear(reduceMotion = reduceMotion) { Wordmark(reduceMotion = reduceMotion) }
         Spacer(Modifier.height(12.dp))
 
         val greetingName = state.settings.name.ifBlank { "there" }

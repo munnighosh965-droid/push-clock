@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 added a second hand to AnalogClock, so the widget can sweep. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
+
+    <AnalogClock
+        android:id="@+id/widget_analog_clock"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:contentDescription="@string/widget_clock_description"
+        android:dial="@drawable/widget_clock_dial"
+        android:hand_hour="@drawable/widget_hand_hour"
+        android:hand_minute="@drawable/widget_hand_minute"
+        android:hand_second="@drawable/widget_hand_second" />
+
+    <TextClock
+        android:id="@+id/widget_digital_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:format12Hour="h:mm a"
+        android:format24Hour="h:mm a"
+        android:textColor="#F4F1EA"
+        android:textSize="15sp"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/widget_next_alarm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textColor="#E4C58A"
+        android:textSize="11sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_no_alarm" />
+</LinearLayout>

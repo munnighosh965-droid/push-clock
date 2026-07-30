@@ -53,6 +53,7 @@ Linux CI environment):
 | QR card scan dismisses only the matching card | NOT RUN (needs device) |
 | Shake mission counts firm shakes | NOT RUN (needs device) |
 | Alarm without missions still requires the default workout | PASS (automated: MissionEnforcerTest) |
+| Widget dial keeps time and next-alarm line updates on change | NOT RUN (needs device) |
 | Camera permission requested at ring time before fallback | NOT RUN (needs device) |
 
 ## Sounds & custom music

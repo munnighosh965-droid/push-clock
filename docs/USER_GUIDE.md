@@ -52,6 +52,23 @@ never stored or uploaded, and there is no face recognition.
 as a PNG, print it or display it somewhere away from bed. Only that exact
 card dismisses the mission.
 
+## The home-screen widget
+
+Long-press your home screen, choose **Widgets**, and drag the **Power Clock**
+widget out. It is the app's logo running as a real clock: the champagne-gold
+ring with its power notch is the dial, the hands show the actual time, and
+the digital readout and next-alarm line sit underneath. Tapping it opens the
+app, and it can be resized freely.
+
+The hands are driven by Android itself inside your launcher, so the widget
+costs nothing to keep ticking. On Android 12 and newer it also has a sweeping
+second hand; on older versions it updates once a minute, which is all the
+platform's clock view supports there.
+
+Android does not let any third-party app animate its own launcher icon — only
+the preinstalled system clock can do that — so the widget is how Power Clock
+puts a live, time-telling dial on your home screen.
+
 ## The dashboard
 
 The home screen leads with an animated analog clock — a sweeping second

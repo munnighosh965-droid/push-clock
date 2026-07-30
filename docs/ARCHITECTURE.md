@@ -31,6 +31,7 @@ com.powerclock.alarm
 │   └── RingingActivity      full-screen, lock-screen ringing host
 ├── camera/                  CameraX plumbing: PoseAnalyzer (MediaPipe),
 │                            QrAnalyzer + QrCardGenerator (ZXing)
+├── widget/                  home-screen clock widget (AppWidgetProvider)
 └── ui/                      Compose Material 3 screens, one ViewModel each
     ├── home/ alarms/ editor/ progress/ settings/ onboarding/
     ├── ringing/ workout/ reliability/ earlyrise/ privacy/ qrcard/ about/
@@ -39,6 +40,20 @@ com.powerclock.alarm
 ```
 
 \* `domain/` uses only `java.time`, `kotlin.*`, and Kotlin stdlib.
+
+## Home-screen widget
+
+`widget/PowerClockWidgetProvider` publishes the brand mark as a working
+clock. The hands are the framework's `AnalogClock` driven inside the launcher
+process, so the widget keeps time without this app being scheduled at all —
+`updatePeriodMillis` is zero, and the provider only redraws the next-alarm
+line, pushed from `AlarmScheduler` whenever an alarm is armed or cancelled.
+`layout-v31/` adds the sweeping second hand that `AnalogClock` only gained in
+Android 12.
+
+A live *launcher icon* is deliberately not attempted: Android reserves
+time-telling app icons for the preinstalled clock app, and the alternatives
+(swapping activity-aliases on a timer) churn the launcher and are unsafe.
 
 ## Design system
 
