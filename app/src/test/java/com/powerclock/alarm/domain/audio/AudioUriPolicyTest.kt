@@ -31,4 +31,21 @@ class AudioUriPolicyTest {
         assertThat(AudioUriPolicy.isAllowed("https", "/track.mp3", privateDir)).isFalse()
         assertThat(AudioUriPolicy.isAllowed(null, null, privateDir)).isFalse()
     }
+
+    @Test
+    fun `our own copies are recognised so they are never re-copied`() {
+        assertThat(
+            AudioUriPolicy.isPrivateCopy("file", "$privateDir/alarm_track_1.audio", privateDir),
+        ).isTrue()
+    }
+
+    @Test
+    fun `picked documents and outside files are not private copies`() {
+        // Re-copying would clear the private folder before reading the
+        // source, so anything outside it must not be mistaken for a copy.
+        assertThat(AudioUriPolicy.isPrivateCopy("content", "/document/audio:123", privateDir)).isFalse()
+        assertThat(AudioUriPolicy.isPrivateCopy("file", "/sdcard/Music/x.mp3", privateDir)).isFalse()
+        assertThat(AudioUriPolicy.isPrivateCopy("file", null, privateDir)).isFalse()
+        assertThat(AudioUriPolicy.isPrivateCopy("file", "$privateDir/x.audio", "")).isFalse()
+    }
 }

@@ -52,7 +52,73 @@ never stored or uploaded, and there is no face recognition.
 as a PNG, print it or display it somewhere away from bed. Only that exact
 card dismisses the mission.
 
+## Choosing an alarm sound
+
+Open an alarm and use the **Sound** card:
+
+- **Sounds** — the eight original Power Clock tones, plus **Sounds on this
+  device**, which opens Android's own picker so you can use any alarm,
+  ringtone or notification sound already on your phone.
+- **My music** — pick any audio file through Android's document picker. Power
+  Clock never asks for broad storage access and never uploads anything, and
+  you can set the playback start position.
+
+Music you pick is **copied into Power Clock automatically**, so the alarm
+keeps playing your track even if the original file is later moved, deleted,
+or has its permission withdrawn. If there is not enough free space to copy
+it, the app says so and plays the file where it lies.
+
+If a chosen sound is ever unreadable at ring time, the bundled fallback tone
+plays instead — an alarm is never silent. If Android refuses to let Power
+Clock read a device sound (some ROMs restrict user-added ringtones), the app
+says so when you pick it rather than failing at 6 a.m.
+
+## The home-screen widget
+
+Long-press your home screen, choose **Widgets**, and drag the **Power Clock**
+widget out. It is the app's logo running as a real clock: the champagne-gold
+ring with its power notch is the dial, the hands show the actual time, and
+the digital readout and next-alarm line sit underneath. Tapping it opens the
+app, and it can be resized freely.
+
+The hands are driven by Android itself inside your launcher, so the widget
+costs nothing to keep ticking. On Android 12 and newer it also has a sweeping
+second hand; on older versions it updates once a minute, which is all the
+platform's clock view supports there.
+
+There are two widgets:
+
+- **Power Clock** — the full card above: dial, digital time, next alarm.
+- **Power Clock icon** — a one-cell dial with no card, sized to sit *among
+  your app icons*. It looks like the app icon, except the hands really move.
+  The quickest way to add it is **Settings → Home screen → Add the live clock
+  icon**, which asks your launcher to place it for you.
+
+Android does not let any third-party app animate its own launcher icon — the
+launcher looks up the preinstalled clock app by package name and ignores
+everyone else — so the icon-sized widget is as close as Power Clock can get.
+The app icon itself is a real analog clock face, and it animates its hands
+into place every time you launch the app.
+
+## The dashboard
+
+The home screen leads with an animated analog clock — a sweeping second
+hand, an elapsed-seconds arc on the rim, and a soft breathing glow — above
+the current time and date. All times in Power Clock are shown in 12-hour
+format with AM/PM. If you enable **Reduce motion** in Settings (or turn
+animations off system-wide), the dial and the rest of the dashboard become
+completely static.
+
 ## When the alarm rings
+
+The full-screen ringing view opens by itself, over the lock screen, rather
+than arriving as a notification you have to tap.
+
+On **Android 14 and newer this needs a permission** — "Full-screen alarm
+view" in the Reliability Check, also offered during onboarding. Without it
+Android silently downgrades alarms to a heads-up notification in the status
+bar. Power Clock also opens the screen directly when the alarm fires, so the
+notification is only a backup.
 
 The full-screen ringing view appears (over the lock screen too). Tap
 **Start wake-up mission** and complete your stack. Completing a workout is

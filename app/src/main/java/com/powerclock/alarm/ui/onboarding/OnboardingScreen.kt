@@ -421,6 +421,36 @@ private fun PermissionsPage(viewModel: OnboardingViewModel) {
         }
         Spacer(Modifier.height(16.dp))
 
+        // Since Android 14 this is a separate user grant. Without it the
+        // system downgrades the ringing screen to a heads-up notification.
+        val fullScreenOk = Build.VERSION.SDK_INT < 34 ||
+            (context.getSystemService(android.app.NotificationManager::class.java)
+                ?.canUseFullScreenIntent() ?: true)
+        Text(
+            if (fullScreenOk) {
+                "✓ Full-screen alarms allowed"
+            } else {
+                "Full-screen alarms — opens the mission screen over your lock screen instead of a notification"
+            },
+            style = MaterialTheme.typography.titleSmall,
+            color = if (fullScreenOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+        if (!fullScreenOk && Build.VERSION.SDK_INT >= 34) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = {
+                try {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                            android.net.Uri.fromParts("package", context.packageName, null),
+                        ),
+                    )
+                } catch (_: Exception) {
+                }
+            }) { Text("Allow full-screen alarms") }
+        }
+        Spacer(Modifier.height(16.dp))
+
         Text(
             if (cameraGranted) "✓ Camera enabled" else "Camera — counts your wake-up workout on-device; nothing is stored or uploaded",
             style = MaterialTheme.typography.titleSmall,

@@ -31,14 +31,62 @@ com.powerclock.alarm
 │   └── RingingActivity      full-screen, lock-screen ringing host
 ├── camera/                  CameraX plumbing: PoseAnalyzer (MediaPipe),
 │                            QrAnalyzer + QrCardGenerator (ZXing)
+├── widget/                  home-screen clock widget (AppWidgetProvider)
 └── ui/                      Compose Material 3 screens, one ViewModel each
     ├── home/ alarms/ editor/ progress/ settings/ onboarding/
     ├── ringing/ workout/ reliability/ earlyrise/ privacy/ qrcard/ about/
-    ├── components/          PowerCard, ProgressRing, HoldToConfirmButton…
+    ├── components/          PowerCard, ProgressRing, HeroClock, TimeFormat…
     └── theme/               Brand palette, typography, shapes
 ```
 
 \* `domain/` uses only `java.time`, `kotlin.*`, and Kotlin stdlib.
+
+## Home-screen widget
+
+`widget/PowerClockWidgetProvider` publishes the brand mark as a working
+clock. The hands are the framework's `AnalogClock` driven inside the launcher
+process, so the widget keeps time without this app being scheduled at all —
+`updatePeriodMillis` is zero, and the provider only redraws the next-alarm
+line, pushed from `AlarmScheduler` whenever an alarm is armed or cancelled.
+`layout-v31/` adds the sweeping second hand that `AnalogClock` only gained in
+Android 12.
+
+A second provider, `PowerClockIconWidgetProvider`, publishes a one-cell
+version holding only the dial, so it can sit among the app icons and read as
+a Power Clock icon that keeps real time.
+
+A live *launcher icon* is not attainable and is deliberately not attempted.
+Launcher3 and its derivatives read the dynamic-clock metadata
+(`LEVEL_PER_TICK_ICON_ROUND` and its layer-index keys) only after looking the
+package up by name — the AOSP and Lawnchair implementations both hardcode
+`com.google.android.deskclock` — so a third-party app can never qualify. The
+only other route, swapping activity-aliases on a timer, churns the launcher
+and is unsafe at clock frequencies. The icon-sized widget covers the case
+instead, and the launch animation (`ic_splash_animated`) sweeps the icon's
+hands into place through the splash screen.
+
+## Design system
+
+`ui/theme/` holds the whole visual language in two files. `Theme.kt` defines
+the obsidian / champagne-gold / platinum palette for both dark and light
+schemes: gold carries the accents, platinum the secondary information, so the
+two never compete. `Type.kt` pairs Sora (display face, used for clock
+readings and titles) with Inter (text face, used for body copy and controls),
+bundled as static weights under `res/font/`. Clock styles enable tabular
+figures so a ticking readout never shifts the characters around it; Sora
+carries no dingbats, so the few symbol badges (✓ ★ ○) are pinned to Inter.
+
+## Reaching the user when an alarm fires
+
+The ringing service opens `RingingActivity` directly as its primary path, and
+the ringing notification carries the same intent as a full-screen intent for
+backup. The direct start is what makes the alarm reliable: since Android 14
+the full-screen intent needs a separate user grant, and without it the system
+downgrades the alarm to a heads-up notification. Alarms armed with
+`setAlarmClock()` come with a temporary background-activity-start allowance,
+which is what permits the direct launch. Both the onboarding permissions page
+and the Reliability Check surface `canUseFullScreenIntent()` so the grant can
+be fixed before an alarm depends on it.
 
 ## Alarm reliability design
 

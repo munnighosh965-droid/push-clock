@@ -13,4 +13,12 @@
     <string name="default_alarm_label">Wake-up alarm</string>
 
     <string name="cd_app_logo">Power Clock logo</string>
+
+    <string name="widget_label">Power Clock</string>
+    <string name="widget_description">A live Power Clock dial for your home screen, showing the time and your next alarm.</string>
+    <string name="widget_clock_description">Power Clock analog clock showing the current time</string>
+    <string name="widget_no_alarm">No alarm scheduled</string>
+    <string name="widget_next_alarm">Next: %1$s</string>
+    <string name="widget_icon_label">Power Clock icon</string>
+    <string name="widget_icon_description">An icon-sized Power Clock dial that keeps real time. Place it among your app icons.</string>
 </resources>

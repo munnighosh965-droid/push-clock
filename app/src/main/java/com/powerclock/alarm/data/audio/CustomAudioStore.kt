@@ -3,6 +3,7 @@ package com.powerclock.alarm.data.audio
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.StatFs
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -59,11 +60,34 @@ class CustomAudioStore @Inject constructor(
         }
     }
 
+    /**
+     * True when [uri] already points at our own private copy. Re-copying one
+     * of these would delete the source before reading it, so every copy path
+     * checks this first.
+     */
+    fun isPrivateCopy(uri: Uri): Boolean =
+        com.powerclock.alarm.domain.audio.AudioUriPolicy.isPrivateCopy(
+            uri.scheme, uri.path, privateDir.absolutePath,
+        )
+
     /** Only content:// (SAF) and our own private file:// copies are accepted. */
     fun isValidScheme(uri: Uri): Boolean =
         com.powerclock.alarm.domain.audio.AudioUriPolicy.isAllowed(
             uri.scheme, uri.path, privateDir.absolutePath,
         )
+
+    /**
+     * Display name of a device ringtone/alarm sound. System sounds usually
+     * carry no media metadata, so [android.media.Ringtone] is the only place
+     * their human-readable title exists.
+     */
+    suspend fun ringtoneTitle(uri: Uri): String? = withContext(Dispatchers.IO) {
+        try {
+            RingtoneManager.getRingtone(context, uri)?.getTitle(context)?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     suspend fun readMetadata(uri: Uri): AudioTrackInfo? = withContext(Dispatchers.IO) {
         if (!isValidScheme(uri)) return@withContext null
@@ -96,6 +120,8 @@ class CustomAudioStore @Inject constructor(
      */
     suspend fun copyIntoPrivateStorage(uri: Uri): Uri? = withContext(Dispatchers.IO) {
         if (!isValidScheme(uri)) return@withContext null
+        // Already ours: copying would clear the directory holding the source.
+        if (isPrivateCopy(uri)) return@withContext uri
         try {
             val size = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
                 ?: -1L

@@ -180,24 +180,81 @@ class EditorViewModel @Inject constructor(
     fun onCustomTrackPicked(uri: Uri) {
         viewModelScope.launch {
             customAudioStore.persistPermission(uri)
-            val info = customAudioStore.readMetadata(uri)
-            if (info == null) {
+            if (!customAudioStore.isPlayable(uri)) {
                 _state.value = _state.value.copy(
                     copyResult = "That file could not be read. Please pick a different track.",
                 )
                 return@launch
             }
+            val info = customAudioStore.readMetadata(uri)
+            _state.value = _state.value.copy(copyingTrack = true, copyResult = null)
+            // Copy straight away rather than waiting to be asked: a picked
+            // file can be moved, deleted, or have its permission dropped
+            // before the alarm rings, and a silent alarm is the one failure
+            // this app cannot have.
+            val stored = customAudioStore.copyIntoPrivateStorage(uri)
+            update {
+                it.copy(
+                    soundId = SoundCatalog.CUSTOM_ID,
+                    customSoundUri = (stored ?: uri).toString(),
+                    customSoundTitle = info?.let { t -> "${t.title} — ${t.artist}" }
+                        ?: uri.lastPathSegment?.substringAfterLast('/')
+                        ?: "Selected track",
+                    customSoundStartMs = 0L,
+                )
+            }
+            _state.value = _state.value.copy(
+                copyingTrack = false,
+                copyResult = if (stored != null) {
+                    "Saved into Power Clock — this alarm no longer depends on the original file."
+                } else {
+                    "Using the file where it is. Not enough free space to copy it into Power Clock, " +
+                        "so moving or deleting it would fall the alarm back to the bundled tone."
+                },
+            )
+            refreshCustomTrack()
+        }
+    }
+
+    /**
+     * A sound chosen from the device's own ringtone/alarm collection. These
+     * carry no media metadata, so the title comes from [android.media.Ringtone],
+     * and readability is what decides whether we accept the pick.
+     */
+    fun onDeviceSoundPicked(uri: Uri) {
+        viewModelScope.launch {
+            customAudioStore.persistPermission(uri)
+            if (!customAudioStore.isPlayable(uri)) {
+                _state.value = _state.value.copy(
+                    copyResult = "Android would not let Power Clock read that sound. " +
+                        "Pick a different one, or add the file through My music instead.",
+                )
+                return@launch
+            }
+            val title = customAudioStore.ringtoneTitle(uri)
+                ?: customAudioStore.readMetadata(uri)?.title
+                ?: "Device sound"
             update {
                 it.copy(
                     soundId = SoundCatalog.CUSTOM_ID,
                     customSoundUri = uri.toString(),
-                    customSoundTitle = "${info.title} — ${info.artist}",
+                    customSoundTitle = title,
                     customSoundStartMs = 0L,
                 )
             }
+            _state.value = _state.value.copy(copyResult = null)
             refreshCustomTrack()
         }
     }
+
+    /** URI of the currently selected custom sound, for the picker's initial state. */
+    val currentCustomSoundUri: Uri?
+        get() = _state.value.alarm.customSoundUri?.let(Uri::parse)
+
+    /** True once the selected track lives inside Power Clock's own storage. */
+    val customTrackIsLocalCopy: Boolean
+        get() = _state.value.alarm.customSoundUri
+            ?.let { customAudioStore.isPrivateCopy(Uri.parse(it)) } ?: false
 
     fun removeCustomTrack() {
         update {

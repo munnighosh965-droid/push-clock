@@ -47,6 +47,7 @@ import com.powerclock.alarm.ui.components.ProgressRing
 import com.powerclock.alarm.ui.components.TimeFormat
 import com.powerclock.alarm.ui.components.rememberReducedMotion
 import com.powerclock.alarm.ui.home.missionShortName
+import com.powerclock.alarm.ui.theme.Inter
 import com.powerclock.alarm.ui.workout.WorkoutLiveView
 import kotlinx.coroutines.delay
 import java.time.ZonedDateTime
@@ -389,7 +390,13 @@ private fun SuccessScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         ProgressRing(progress = 1f, ringSize = 160.dp, modifier = Modifier.scale(pulse)) {
-            Text("✓", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+            // The display face carries no dingbats, so symbols use the text face.
+            Text(
+                "✓",
+                style = MaterialTheme.typography.displayMedium,
+                fontFamily = Inter,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
         Spacer(Modifier.height(24.dp))
         Text(
@@ -419,6 +426,7 @@ private fun SuccessScreen(
                     Text(
                         if (star <= rated) "★" else "☆",
                         style = MaterialTheme.typography.headlineMedium,
+                        fontFamily = Inter,
                         color = if (star <= rated) {
                             MaterialTheme.colorScheme.primary
                         } else {

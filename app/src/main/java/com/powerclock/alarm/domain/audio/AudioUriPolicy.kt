@@ -10,7 +10,16 @@ object AudioUriPolicy {
 
     fun isAllowed(scheme: String?, path: String?, privateDirPath: String): Boolean = when (scheme) {
         "content" -> true
-        "file" -> path != null && privateDirPath.isNotBlank() && path.startsWith(privateDirPath)
+        "file" -> isPrivateCopy(scheme, path, privateDirPath)
         else -> false
     }
+
+    /**
+     * True when the URI already points inside our own private audio folder.
+     * Copying such a URI again would clear the folder holding the source
+     * before it could be read, so every copy path checks this first.
+     */
+    fun isPrivateCopy(scheme: String?, path: String?, privateDirPath: String): Boolean =
+        scheme == "file" && path != null && privateDirPath.isNotBlank() &&
+            path.startsWith(privateDirPath)
 }

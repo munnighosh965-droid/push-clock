@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powerclock.alarm.domain.stats.WakeStats
 import com.powerclock.alarm.ui.theme.AlertRed
-import com.powerclock.alarm.ui.theme.ElectricLime
-import com.powerclock.alarm.ui.theme.PowerBlue
+import com.powerclock.alarm.ui.theme.Champagne
+import com.powerclock.alarm.ui.theme.Platinum
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -61,23 +61,33 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** The in-app POWER CLOCK wordmark. */
+/** The in-app POWER CLOCK wordmark, led by the live logo clock. */
 @Composable
-fun Wordmark(modifier: Modifier = Modifier, big: Boolean = false) {
+fun Wordmark(
+    modifier: Modifier = Modifier,
+    big: Boolean = false,
+    reduceMotion: Boolean = false,
+) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        LogoMark(
+            diameter = if (big) 40.dp else 28.dp,
+            showSeconds = big,
+            reduceMotion = reduceMotion,
+            modifier = Modifier.padding(end = if (big) 12.dp else 8.dp),
+        )
         Text(
             "POWER",
             style = if (big) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
-            letterSpacing = 2.sp,
+            letterSpacing = 3.sp,
         )
         Text(
             " CLOCK",
             style = if (big) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
-            color = ElectricLime,
-            letterSpacing = 2.sp,
+            fontWeight = FontWeight.Bold,
+            color = Champagne,
+            letterSpacing = 3.sp,
         )
     }
 }
@@ -89,7 +99,7 @@ fun ProgressRing(
     modifier: Modifier = Modifier,
     ringSize: Dp = 180.dp,
     stroke: Dp = 12.dp,
-    color: Color = ElectricLime,
+    color: Color = Champagne,
     track: Color = MaterialTheme.colorScheme.surfaceVariant,
     content: @Composable () -> Unit = {},
 ) {
@@ -127,8 +137,8 @@ fun WeekDots(results: List<WakeStats.DayResult>, modifier: Modifier = Modifier) 
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         results.forEach { r ->
             val (color, letter) = when (r) {
-                WakeStats.DayResult.SUCCESS -> ElectricLime to "✓"
-                WakeStats.DayResult.EMERGENCY -> PowerBlue to "E"
+                WakeStats.DayResult.SUCCESS -> Champagne to "✓"
+                WakeStats.DayResult.EMERGENCY -> Platinum to "E"
                 WakeStats.DayResult.MISSED -> AlertRed to "×"
                 WakeStats.DayResult.NO_ALARM -> MaterialTheme.colorScheme.surfaceVariant to "·"
             }
@@ -167,17 +177,31 @@ fun rememberReducedMotion(userPreference: Boolean): Boolean {
     return userPreference || systemReduced
 }
 
+/** Every clock reading in Power Clock is 12-hour with an AM/PM suffix. */
 object TimeFormat {
-    private val clock = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+    private val clockDigits = DateTimeFormatter.ofPattern("h:mm", Locale.US)
+    private val meridiem = DateTimeFormatter.ofPattern("a", Locale.US)
     private val dateFull = DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.US)
-    private val dateShort = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.US)
+    private val dateShort = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US)
 
-    fun clock(time: ZonedDateTime): String = clock.format(time)
+    fun clock(time: ZonedDateTime): String = "${clockDigits(time)} ${meridiem(time)}"
     fun fullDate(time: ZonedDateTime): String = dateFull.format(time)
     fun nextAlarm(time: ZonedDateTime): String = dateShort.format(time)
 
+    /** Hours and minutes only, for displays that style AM/PM separately. */
+    fun clockDigits(time: ZonedDateTime): String = clockDigits.format(time)
+
+    fun meridiem(time: ZonedDateTime): String = meridiem.format(time)
+
     fun minutesAsClock(minutesOfDay: Int): String =
-        "%02d:%02d".format(minutesOfDay / 60, minutesOfDay % 60)
+        hourMinute(minutesOfDay / 60, minutesOfDay % 60)
+
+    /** Formats a wall-clock hour (0..23) and minute as e.g. "7:05 AM". */
+    fun hourMinute(hour: Int, minute: Int): String {
+        val hour12 = if (hour % 12 == 0) 12 else hour % 12
+        val suffix = if (hour < 12) "AM" else "PM"
+        return "%d:%02d %s".format(hour12, minute, suffix)
+    }
 
     fun countdown(from: ZonedDateTime, to: ZonedDateTime): String {
         val d = Duration.between(from, to)

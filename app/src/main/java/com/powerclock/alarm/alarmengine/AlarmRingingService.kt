@@ -174,6 +174,25 @@ class AlarmRingingService : Service() {
         }
     }
 
+    /**
+     * Opens the full-screen ringing UI directly. Failures are survivable:
+     * the ringing notification carries the same intent as a full-screen
+     * intent, so the alarm still reaches the user.
+     */
+    private fun launchRingingActivity(alarmId: Long) {
+        try {
+            startActivity(
+                Intent(this, RingingActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_NO_USER_ACTION
+                    putExtra(RingingActivity.EXTRA_ALARM_ID, alarmId)
+                },
+            )
+        } catch (_: Throwable) {
+        }
+    }
+
     /** Moves to the next ringable queued alarm, or winds the service down. */
     private suspend fun advanceQueueOrStop() {
         while (true) {
@@ -206,6 +225,14 @@ class AlarmRingingService : Service() {
 
         // Upgrade the provisional notification with the alarm's label.
         ensureForeground(alarm)
+
+        // Take the user straight to the full-screen mission view. The
+        // notification's full-screen intent is only a backup: since Android
+        // 14 it needs a permission the user can revoke, and when it is
+        // missing the system silently degrades it to a heads-up notification.
+        // Alarms armed with setAlarmClock() come with a temporary
+        // background-activity-start allowance, which is what makes this work.
+        launchRingingActivity(alarm.id)
 
         // History row is created immediately so even a crash records the ring.
         activeEventId = try {

@@ -30,6 +30,7 @@ import com.powerclock.alarm.ui.components.PowerCard
 import com.powerclock.alarm.ui.components.ProgressRing
 import com.powerclock.alarm.ui.components.SectionTitle
 import com.powerclock.alarm.ui.components.WeekDots
+import com.powerclock.alarm.ui.theme.Inter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -194,6 +195,7 @@ fun ProgressScreen(
                             Text(
                                 if (badge.earned) "★" else "☆",
                                 style = MaterialTheme.typography.headlineSmall,
+                                fontFamily = Inter,
                                 color = if (badge.earned) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
@@ -244,7 +246,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 
 @Composable
 private fun HistoryRow(event: WakeEvent) {
-    val formatter = DateTimeFormatter.ofPattern("EEE, MMM d · HH:mm", Locale.US)
+    val formatter = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US)
     val time = Instant.ofEpochMilli(event.rangAtMs).atZone(ZoneId.systemDefault())
     PowerCard(Modifier.fillMaxWidth()) {
         Column {

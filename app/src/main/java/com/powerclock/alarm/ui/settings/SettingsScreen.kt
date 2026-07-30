@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -17,7 +18,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -31,6 +36,7 @@ import com.powerclock.alarm.ui.components.PowerCard
 import com.powerclock.alarm.ui.components.SectionTitle
 import com.powerclock.alarm.ui.editor.ToggleRow
 import com.powerclock.alarm.ui.onboarding.TimeSliderRow
+import com.powerclock.alarm.widget.PowerClockIconWidgetProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +72,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Column(
         modifier = modifier
@@ -97,6 +104,43 @@ fun SettingsScreen(
                 }
                 ToggleRow("Exercise isn't safe for me right now", settings.cannotExercise) { v ->
                     viewModel.update { it.copy(cannotExercise = v) }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        SectionTitle("Home screen")
+        PowerCard(Modifier.fillMaxWidth()) {
+            Column {
+                Text("Live clock on your home screen", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Adds an icon-sized Power Clock dial whose hands really move. Android only lets " +
+                        "the preinstalled clock app animate its launcher icon, so this is how Power " +
+                        "Clock puts a working clock among your icons.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                var pinMessage by remember { mutableStateOf<String?>(null) }
+                Button(
+                    onClick = {
+                        pinMessage = if (PowerClockIconWidgetProvider.requestPin(context)) {
+                            null
+                        } else {
+                            "Your launcher can't add it directly. Long-press the home screen, " +
+                                "choose Widgets, and pick \"Power Clock icon\"."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Add the live clock icon") }
+                pinMessage?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
                 }
             }
         }

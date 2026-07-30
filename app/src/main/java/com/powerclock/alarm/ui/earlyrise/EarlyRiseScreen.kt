@@ -113,8 +113,8 @@ class EarlyRiseViewModel @Inject constructor(
             settingsRepository.update {
                 it.copy(earlyRiseLastAppliedEpochDay = LocalDate.now().toEpochDay())
             }
-            _applied.value =
-                "Alarm moved to %02d:%02d. Next nudge in ${settings.value.earlyRiseEveryDays} days.".format(p.newHour, p.newMinute)
+            _applied.value = "Alarm moved to ${TimeFormat.hourMinute(p.newHour, p.newMinute)}. " +
+                "Next nudge in ${settings.value.earlyRiseEveryDays} days."
             _proposal.value = null
         }
     }
@@ -195,10 +195,11 @@ fun EarlyRiseScreen(
                     Text("Today's proposal", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Move the %02d:%02d alarm to %02d:%02d?".format(
-                            currentProposal.alarm.hour, currentProposal.alarm.minute,
-                            currentProposal.newHour, currentProposal.newMinute,
-                        ),
+                        "Move the ${
+                            TimeFormat.hourMinute(currentProposal.alarm.hour, currentProposal.alarm.minute)
+                        } alarm to ${
+                            TimeFormat.hourMinute(currentProposal.newHour, currentProposal.newMinute)
+                        }?",
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Spacer(Modifier.height(12.dp))

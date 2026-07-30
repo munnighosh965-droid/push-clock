@@ -159,7 +159,7 @@ fun AlarmListScreen(
             title = { Text("Delete alarm?") },
             text = {
                 Text(
-                    "The ${"%02d:%02d".format(candidate.hour, candidate.minute)} alarm will be removed and unscheduled.",
+                    "The ${TimeFormat.hourMinute(candidate.hour, candidate.minute)} alarm will be removed and unscheduled.",
                 )
             },
             confirmButton = {
@@ -192,7 +192,7 @@ private fun AlarmRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "%02d:%02d".format(alarm.hour, alarm.minute),
+                        TimeFormat.hourMinute(alarm.hour, alarm.minute),
                         style = MaterialTheme.typography.displayMedium,
                         color = if (alarm.enabled) {
                             MaterialTheme.colorScheme.onSurface

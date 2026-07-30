@@ -53,6 +53,14 @@ Linux CI environment):
 | QR card scan dismisses only the matching card | NOT RUN (needs device) |
 | Shake mission counts firm shakes | NOT RUN (needs device) |
 | Alarm without missions still requires the default workout | PASS (automated: MissionEnforcerTest) |
+| Widget dial keeps time and next-alarm line updates on change | NOT RUN (needs device) |
+| Icon-sized widget ticks in the app grid | NOT RUN (needs device) |
+| Device ringtone picker selects and plays a system alarm sound | NOT RUN (needs device) |
+| Ringing opens full screen directly, not as a notification | NOT RUN (needs device) |
+| Picked music is copied in and still plays after deleting the original | NOT RUN (needs device) |
+| Re-copy of an already-copied track does not destroy it | PASS (automated: AudioUriPolicyTest) |
+| "Add the live clock icon" pins the widget | NOT RUN (needs device) |
+| Unreadable device sound is rejected at pick time, not at ring time | NOT RUN (needs device) |
 | Camera permission requested at ring time before fallback | NOT RUN (needs device) |
 
 ## Sounds & custom music
